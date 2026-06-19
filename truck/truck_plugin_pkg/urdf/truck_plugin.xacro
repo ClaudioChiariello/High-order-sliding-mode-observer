@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<robot name="truck" xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <xacro:include filename="$(find truck_description)/urdf/truck.gazebo" />
+    
+    <xacro:arg name="driven_wheels" default="8"/>
+    <xacro:include filename="$(find truck_plugin_pkg)/urdf/truck_plugin.plugin"/>
+</robot>

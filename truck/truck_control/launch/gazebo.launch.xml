@@ -1,0 +1,29 @@
+<launch>
+    <let name="gazebo_config_path" value="$(find-pkg-share truck_control)/config/ros_gz_bridge_gazebo.yaml" />
+    <let name="sensors_gz_config_path" value="$(find-pkg-share truck_description)/config/ros_gz_bridge_gazebo.yaml" />
+    <arg name="control_algorithm" default="kinematic_control"/>
+    <arg name="app_point_offset" default="0.0"/>
+    <arg name="driven_wheels" default="8" />
+    <arg name="use_sim_time" default="true"/>
+
+    <node pkg="ros_gz_bridge" exec="parameter_bridge" name="control_bridge">
+        <param name="config_file" value="$(var gazebo_config_path)" />
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+
+    <node pkg="ros_gz_bridge" exec="parameter_bridge" name="sensors_bridge">
+        <param name="config_file" value="$(var sensors_gz_config_path)" />
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+
+    <node pkg="controller_manager" exec="spawner" args="joint_state_broadcaster"/>
+    <node pkg="controller_manager" exec="spawner" args="steering_controller"/>
+    <node pkg="controller_manager" exec="spawner" args="traction_controller"/>
+
+    <include file="$(find-pkg-share truck_control)/launch/truck_control.launch.xml">
+        <arg name="control_algorithm" value="$(var control_algorithm)"/>
+        <arg name="driven_wheels" value="$(var driven_wheels)"/>
+        <arg name="app_point_offset" value="$(var app_point_offset)"/>
+        <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    </include>
+</launch>

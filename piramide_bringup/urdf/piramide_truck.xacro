@@ -1,0 +1,21 @@
+<?xml version="1.0" ?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="truck">
+  <xacro:arg name="control_mode" default="control"/>
+  <xacro:arg name="driven_wheels" default="8"/>
+  <xacro:arg name="app_point_offset" default="0.0"/>
+  <xacro:arg name="steering_limit" default="${35 * pi / 180}"/>
+
+  <xacro:include filename="$(find truck_description)/urdf/truck.xacro" />
+
+  <xacro:if value="${'$(arg control_mode)' == 'control'}">
+    <xacro:include filename="$(find truck_control)/urdf/truck_control.xacro" />
+  </xacro:if>
+
+  <xacro:if value="${'$(arg control_mode)' == 'ctrl_plugin'}">
+    <xacro:include filename="$(find truck_controller_pkg)/urdf/truck_control.xacro" />
+  </xacro:if>
+
+  <xacro:if value="${'$(arg control_mode)' == 'plugin'}">
+    <xacro:include filename="$(find truck_plugin_pkg)/urdf/truck_plugin.xacro" />
+  </xacro:if>
+</robot>

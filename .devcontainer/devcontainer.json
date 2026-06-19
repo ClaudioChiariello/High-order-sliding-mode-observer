@@ -1,0 +1,13 @@
+{
+    "name": "ros2-ros2_jazzy-run-1d207de4f14f",
+    "dockerComposeFile": "/home/claudio/Documents/ros2/docker-compose.yaml",
+    "service": "ros2_jazzy",
+    "workspaceFolder": "/ros2_ws",
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "python.defaultInterpreterPath": "/usr/local/bin/python"
+            }
+        }
+    }
+}

@@ -1,0 +1,39 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    truck_controller:
+      type: truck_controller/TruckController
+
+truck_controller:
+  ros__parameters:
+    reference_timeout: 1.0
+    traction_joints_names:
+      - left_rot_joint_a1
+      - right_rot_joint_a1
+      - left_rot_joint_a2
+      - right_rot_joint_a2
+      - left_rot_joint_a3
+      - right_rot_joint_a3
+      - left_rot_joint_a4
+      - right_rot_joint_a4
+    steering_joints_names:
+      - left_steer_joint_a1
+      - right_steer_joint_a1
+      - left_steer_joint_a2
+      - right_steer_joint_a2
+    steering_limit: 0.5
+    rear_wheel_separation: 2.088
+    front_wheel_separation: 2.131
+    wheel_radius: 0.5645
+    front_wheel_base: 1.9
+    central_wheel_base: 3.75
+    rear_wheel_base: 1.382
+    max_velocity: 11.111
+    min_velocity: -4.167
+    max_acceleration: 7.0
+    min_acceleration: -7.0
+    full_traction: true

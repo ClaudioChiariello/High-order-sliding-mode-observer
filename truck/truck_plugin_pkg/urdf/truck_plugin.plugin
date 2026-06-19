@@ -1,0 +1,44 @@
+<?xml version="1.0" ?>
+<robot name="truck" xmlns:xacro="http://www.ros.org/wiki/xacro" >
+
+<xacro:arg name="driven_wheels" default="8"/>
+
+
+
+<gazebo>
+
+    <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
+        <topic>/joint_states</topic>      
+    </plugin>
+
+    <plugin filename="truck_plugin" name="gz::sim::v8::systems::TruckPlugin">
+        <rear_left_joint>left_rot_joint_a4</rear_left_joint>
+        <rear_left_joint>left_rot_joint_a3</rear_left_joint>
+        <rear_right_joint>right_rot_joint_a4</rear_right_joint>
+        <rear_right_joint>right_rot_joint_a3</rear_right_joint>
+        <front_left_2_steering_joint>left_steer_joint_a2</front_left_2_steering_joint>
+        <front_right_2_steering_joint>right_steer_joint_a2</front_right_2_steering_joint>
+        <front_left_1_steering_joint>left_steer_joint_a1</front_left_1_steering_joint>
+        <front_right_1_steering_joint>right_steer_joint_a1</front_right_1_steering_joint>
+        <front_left_1_drive_joint>left_rot_joint_a1</front_left_1_drive_joint>
+        <front_right_1_drive_joint>right_rot_joint_a1</front_right_1_drive_joint>
+        <front_left_2_drive_joint>left_rot_joint_a2</front_left_2_drive_joint>
+        <front_right_2_drive_joint>right_rot_joint_a2</front_right_2_drive_joint>
+        <odom_publish_frequency>50.0</odom_publish_frequency>
+        <driven_wheels>$(arg driven_wheels)</driven_wheels>
+        <steering_limit>0.5</steering_limit>
+        <steer_p_gain>0.5</steer_p_gain>
+        <rear_wheel_separation>2.088</rear_wheel_separation>
+        <front_wheel_separation>2.131</front_wheel_separation>
+        <wheel_radius>0.5645</wheel_radius>
+        <front_wheel_base>1.9</front_wheel_base>
+        <central_wheel_base>3.75</central_wheel_base>
+        <rear_wheel_base>1.382</rear_wheel_base>
+        <max_velocity>11.111</max_velocity>
+        <min_velocity>-4.167</min_velocity>
+        <max_acceleration>7.0</max_acceleration>
+        <min_acceleration>-7.0</min_acceleration>
+    </plugin>
+</gazebo>
+
+</robot>

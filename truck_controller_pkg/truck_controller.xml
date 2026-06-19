@@ -1,0 +1,7 @@
+<library path="truck_controller">
+  <class name="truck_controller/TruckController" type="truck_controller::TruckController" base_class_type="controller_interface::ControllerInterface">
+  <description>
+    The truck controller transforms linear and angular velocity messages into traction speeds and steering angles for each wheel for a truck.
+  </description>
+  </class>
+</library>

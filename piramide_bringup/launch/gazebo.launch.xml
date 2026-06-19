@@ -1,0 +1,63 @@
+<launch>
+    <let name="xacro_file" value="$(find-pkg-share piramide_bringup)/urdf/piramide_truck.xacro"/>
+    
+    <!--
+    variable that determies whether truck_control or truck_plugin_pkg will be launched.
+    Set to "control" for truck_control, to "plugin" for truck_plugin_pkg, to "ctrl_plugin" for truck_controller_pkg.
+    -->
+    <arg name="control_mode" default="ctrl_plugin"/>
+    <!--
+    variable indicating the number of traction wheels
+    (and thus determines whether drive is 8x4 or 8x8)
+    -->
+    <arg name="driven_wheels" default="8"/>
+    <!--
+    variable that determines which control algorithm is to be used
+    (only applies if control_mode == control)
+    -->
+    <arg name="control_algorithm" default="kinematic_control"/>
+    <!--
+    variable that determines the position of desired application point ahead of ICR axis
+    (only applies if control_mode == control)
+    -->
+    <arg name="app_point_offset" default="0.0"/>
+    <!--steering limit for the front wheels-->
+    <arg name="steering_limit" default="0.52"/>
+    <!--variable determining whether sim_time shall be used in all launched nodes-->
+    <arg name="use_sim_time" default="true"/>
+
+    <node pkg="robot_state_publisher" exec="robot_state_publisher">
+        <param name="robot_description"
+         value="$(command 'xacro $(var xacro_file)
+         control_mode:=$(var control_mode)
+         driven_wheels:=$(var driven_wheels)
+         app_point_offset:=$(var app_point_offset)
+         steering_limit:=$(var steering_limit)')"/>
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+
+    <include file="$(find-pkg-share ros_gz_sim)/launch/gz_sim.launch.py">
+        <arg name="gz_args" value="-v 4 empty.sdf -r" />
+    </include>
+
+    <node pkg="ros_gz_sim" exec="create" args="-topic robot_description -name truck -allow_renaming false -x 0.0 -y 0.0 -z 0.32 -Y 0.0"/>
+
+    <include if="$(eval '&quot;$(var control_mode)&quot; == &quot;control&quot;')"
+             file="$(find-pkg-share truck_control)/launch/gazebo.launch.xml">
+        <arg name="control_algorithm" value="$(var control_algorithm)"/>
+        <arg name="app_point_offset" value="$(var app_point_offset)"/>
+        <arg name="driven_wheels" value="$(var driven_wheels)"/>
+        <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    </include>
+
+    <include if="$(eval '&quot;$(var control_mode)&quot; == &quot;ctrl_plugin&quot;')"
+             file="$(find-pkg-share truck_controller_pkg)/launch/gazebo.launch.xml">
+        <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    </include>
+    
+    <include if="$(eval '&quot;$(var control_mode)&quot; == &quot;plugin&quot;')"
+            file="$(find-pkg-share truck_plugin_pkg)/launch/gazebo.launch.xml">
+        <arg name="driven_wheels" value="$(var driven_wheels)"/>
+        <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    </include>
+</launch>

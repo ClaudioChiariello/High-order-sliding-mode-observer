@@ -1,0 +1,68 @@
+<?xml version="1.0" ?>
+<robot name="truck" xmlns:xacro="http://www.ros.org/wiki/xacro" >
+
+<xacro:arg name="steering_limit" default="${35 * pi / 180}"/>
+
+<ros2_control name="TruckController" type="system">
+    <hardware>
+        <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+
+    <joint name="left_steer_joint_a2">
+        <command_interface name="position">
+            <param name="min">-$(arg steering_limit)</param>
+            <param name="max">$(arg steering_limit)</param>
+        </command_interface>
+        <state_interface name="position"/>
+    </joint>
+
+    <joint name="right_steer_joint_a2">
+        <command_interface name="position">
+            <param name="min">-$(arg steering_limit)</param>
+            <param name="max">$(arg steering_limit)</param>
+        </command_interface>
+        <state_interface name="position"/>
+    </joint>
+
+        <joint name="left_steer_joint_a1">
+        <command_interface name="position">
+            <param name="min">-$(arg steering_limit)</param>
+            <param name="max">$(arg steering_limit)</param>
+        </command_interface>
+        <state_interface name="position"/>
+    </joint>
+
+    <joint name="right_steer_joint_a1">
+        <command_interface name="position">
+            <param name="min">-$(arg steering_limit)</param>
+            <param name="max">$(arg steering_limit)</param>
+        </command_interface>
+        <state_interface name="position"/>
+    </joint>
+
+    <joint name="left_rot_joint_a4">
+        <command_interface name="velocity"/>
+        <state_interface name="velocity"/>
+         
+    </joint>
+
+    <joint name="right_rot_joint_a4">
+        <command_interface name="velocity"/>
+        <state_interface name="velocity"/>
+         
+    </joint>
+
+    <joint name="left_rot_joint_a3">
+        <command_interface name="velocity"/>
+        <state_interface name="velocity"/>
+         
+    </joint>
+
+    <joint name="right_rot_joint_a3">
+        <command_interface name="velocity"/>
+        <state_interface name="velocity"/>
+         
+    </joint>
+</ros2_control>
+
+</robot>

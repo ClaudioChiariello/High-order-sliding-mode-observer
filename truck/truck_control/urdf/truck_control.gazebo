@@ -1,0 +1,27 @@
+<?xml version="1.0" ?>
+<robot name="truck" xmlns:xacro="http://www.ros.org/wiki/xacro" >
+
+<xacro:arg name="driven_wheels" default="8"/>
+
+<!--plugin tag necessary to set up ros2_control controllers for the vehicle wheels-->
+<gazebo>
+  <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find truck_control)/config/truck8x$(arg driven_wheels)_controllers.yaml</parameters>
+  </plugin>
+</gazebo>
+
+<!--plugin tag necessary to compute "perfect" (i.e., "ground truth") odometry of application point-->
+<gazebo>
+  <plugin
+    filename="gz-sim-odometry-publisher-system"
+    name="gz::sim::systems::OdometryPublisher">
+    <odom_topic>odometry</odom_topic>
+    <tf_topic>tf</tf_topic>
+    <robot_base_frame>base_footprint</robot_base_frame>
+    <odom_frame>world</odom_frame>
+    <publish_link_pose>true</publish_link_pose>
+  </plugin>
+</gazebo>
+
+<xacro:include filename="$(find truck_description)/urdf/truck.gazebo" />
+</robot>

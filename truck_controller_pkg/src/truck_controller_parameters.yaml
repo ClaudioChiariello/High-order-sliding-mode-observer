@@ -1,0 +1,188 @@
+truck_controller:
+  reference_timeout: {
+    type: double,
+    default_value: 1.0,
+    description: "Timeout for controller references after which they will be reset. This is especially useful for controllers that can cause unwanted and dangerous behavior if reference is not reset, e.g., velocity controllers. If value is 0 the reference is reset after each run.",
+  }
+
+  traction_joints_names: {
+    type: string_array,
+    description: "Names of traction wheel joints. For kinematic configurations with two traction joints, the expected order is: right joint, left joint.",
+    default_value: [],
+    read_only: true,
+    validation: {
+      size_lt<>: [9],
+      unique<>: null,
+      not_empty<>: null,
+    }
+  }
+
+  steering_joints_names: {
+    type: string_array,
+    description: "Names of steering joints. For kinematic configurations with two steering joints, the expected order is: right joint, left joint. The orientation of the steering axes is expected as such: When positive steering position value is commanded, then the robot should turn in positive direction of the z-axis of the vehicle (see REP-103).",
+    default_value: [],
+    read_only: true,
+    validation: {
+      size_lt<>: [5],
+      unique<>: null,
+      not_empty<>: null,
+    }
+  }
+
+  traction_joints_state_names: {
+    type: string_array,
+    description: "(Optional) Names of tractions joints to read states from. If not set joint names from 'traction_joints_names' will be used.",
+    default_value: [],
+    read_only: true,
+    validation: {
+      size_lt<>: [9],
+      unique<>: null,
+    }
+  }
+
+  steering_joints_state_names: {
+    type: string_array,
+    description: "(Optional) Names of steering joints to read states from. If not set joint names from 'steering_joints_names' will be used.",
+    default_value: [],
+    read_only: true,
+    validation: {
+      size_lt<>: [5],
+      unique<>: null,
+    }
+  }
+
+#  left_rear_joints: {
+#    type: string_array,
+#    default_value: [],
+#    description: "Names of the rear left side wheels' joints",
+#    validation: {
+#      not_empty<>: []
+#    }
+#  }
+#  
+#  right_rear_joints: {
+#    type: string_array,
+#    default_value: [],
+#    description: "Names of the rear right side wheels' joints",
+#    validation: {
+#      not_empty<>: []
+#    }
+#  }
+
+  rear_wheel_separation: {
+    type: double,
+    description: "Shortest distance between the left and right rear wheels. If this parameter is wrong, the robot will not behave correctly in curves.",
+    validation: {
+      gt<>: [0.0]
+    }
+  }
+
+  front_wheel_separation: {
+    type: double,
+    description: "Shortest distance between the left and right front wheels. If this parameter is wrong, the robot will not behave correctly in curves.",
+    validation: {
+      gt<>: [0.0]
+    }
+  }
+
+  wheel_radius: {
+    type: double,
+    description: "Radius of a wheel, i.e., wheels size, used for transformation of linear velocity into wheel rotations. If this parameter is wrong the robot will move faster or slower than expected.",
+    validation: {
+      gt<>: [0.0]
+    }
+  }
+
+  front_wheel_base: {
+    type: double,
+    description: "Shortest distance between the two front axes. If this parameter is wrong, affects traction and steering behaviour.",
+    validation: {
+      gt<>: [0.0]
+    }
+  }
+
+  central_wheel_base: {
+    type: double,
+    description: "Shortest distance between the two central axes. If this parameter is wrong, affects traction and steering behaviour.",
+    validation: {
+      gt<>: [0.0]
+    }
+  }
+
+  rear_wheel_base: {
+    type: double,
+    description: "Shortest distance between the two rear axes. If this parameter is wrong, affects traction and steering behaviour.",
+    validation: {
+      gt<>: [0.0]
+    }
+  }
+
+  #max_velocity: {
+  #  type: double,
+  #  default_value: 0.0,
+  #  description: "Maximum velocity of the robot. If this parameter is wrong, the robot will move faster or slower than expected.",
+  #  validation: {
+  #    gt<>: [0.0]
+  #  }
+  #}
+#
+  #max_acceleration: {
+  #  type: double,
+  #  default_value: 0.0,
+  #  description: "Maximum acceleration of the robot. If this parameter is wrong, the robot will accelerate faster or slower than expected.",
+  #  validation: {
+  #    gt<>: [0.0]
+  #  }
+  #}
+#
+  #min_velocity: {
+  #  type: double,
+  #  default_value: 0.0,
+  #  description: "Minimum velocity of the robot. If this parameter is wrong, the robot will move faster or slower than expected.",
+  #  validation: {
+  #    lt<>: [0.0]
+  #  }
+  #}
+#
+  #min_acceleration: {
+  #  type: double,
+  #  default_value: 0.0,
+  #  description: "Minimum acceleration of the robot. If this parameter is wrong, the robot will accelerate faster or slower than expected.",
+  #  validation: {
+  #    lt<>: [0.0]
+  #  }
+  #}
+
+  position_feedback: {
+    type: bool,
+    default_value: false,
+    description: "Choice of feedback type, if position_feedback is false then ``HW_IF_VELOCITY`` is taken as interface type, if
+    position_feedback is true then ``HW_IF_POSITION`` is taken as interface type",
+    read_only: false,
+  }
+
+  full_traction: {
+    type: bool,
+    default_value: false,
+    description: "Whether the robot has traction on all wheels or not. If true, the robot is expected to have traction on all wheels, otherwise only on rear wheels.",
+    read_only: false,
+  }
+
+  steering_limit: {
+    type: double,
+    default_value: 0.5,
+    description: "Maximum steering angle (in radians) of front wheels.",
+    validation: {
+      gt<>: [0.0]
+    }
+  }
+
+
+  app_point_offset: {
+    type: double,
+    default_value: 0.0,
+    description: "Offset of the application point from the center of the robot.",
+    validation: {
+      gt_eq<>: [0.0]
+    }
+  }

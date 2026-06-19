@@ -1,0 +1,18 @@
+<launch>
+
+    <arg name="gui" default="True"/>
+
+    <let name="share_dir" value="$(find-pkg-share truck_description)"/>
+    <let name="xacro_file" value="$(var share_dir)/urdf/truck.xacro"/>
+    <let name="rviz_config_file" value="$(var share_dir)/rviz/display.rviz"/>
+
+    <node pkg="robot_state_publisher" exec="robot_state_publisher">
+        <param name="robot_description" value="$(command 'xacro $(var xacro_file)')" />
+    </node>
+
+    <node if="$(not $(var gui))" pkg="joint_state_publisher" exec="joint_state_publisher" />
+    <node if="$(var gui)" pkg="joint_state_publisher_gui" exec="joint_state_publisher_gui" />
+
+    <node pkg="rviz2" exec="rviz2" args="-d $(var rviz_config_file)" output="screen"/>
+
+</launch>

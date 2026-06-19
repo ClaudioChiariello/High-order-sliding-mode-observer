@@ -1,0 +1,434 @@
+<?xml version="1.0" ?>
+<sdf version="1.8">
+
+<model  name="truck">
+    <link name="base_link">
+    <inertial>
+        <origin xyz="-2.315789406362742 0.060309099677358306 2.0832863727326365" rpy="0 0 0"/>
+        <mass value="11829.5199"/>
+        <inertia ixx="14576.4006" ixy="0.422464" ixz="13482.4383" iyy="98410.5574" iyz="0.103473" izz="98414.9426"/>
+    </inertial>
+    <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="silver"/>
+    </visual>
+    <collision>
+        <geometry>
+        <box size="10.2 2.6 3.6" />
+        </geometry>
+        <origin xyz="0 2.7721660388234675e-05 2.040816658051612" rpy="0 0 0" />
+    </collision>
+    </link>
+
+    <link name="left_wheel_axis4_1">
+    <inertial>
+        <origin xyz="3.472872993626197e-07 4.744911922260897e-07 4.782199592989755e-07" rpy="0 0 0"/>
+        <mass value="121.3100"/>
+        <inertia ixx="13.0741" ixy="0" ixz="0" iyy="24.2102" iyz="0" izz="13.0741"/>
+    </inertial>
+    <visual>
+        <origin xyz="-3.333571 0.983719 -0.602025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/left_wheel_axis4_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision name="left_wheel_axis4_collision_1">
+        <geometry>
+        <sphere radius="0.5645" />
+        </geometry>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+    </collision>
+    </link>
+
+    <link name="left_wheel_axis3_1">
+    <inertial>
+        <origin xyz="3.472872989185305e-07 4.744911920040451e-07 4.782199596320424e-07" rpy="0 0 0"/>
+        <mass value="121.3100"/>
+        <inertia ixx="13.0741" ixy="0" ixz="0" iyy="24.2102" iyz="0" izz="13.0741"/>
+    </inertial>
+    <visual>
+        <origin xyz="-1.951571 0.983719 -0.602025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/left_wheel_axis3_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision name="left_wheel_axis3_collision_1">
+        <geometry>
+        <sphere radius="0.5645" />
+        </geometry>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+    </collision>
+    </link>
+
+    <link name="right_wheel_axis4_1">
+    <inertial>
+        <origin xyz="3.472872993626197e-07 4.744911921150674e-07 4.78219957633641e-07" rpy="0 0 0"/>
+        <mass value="121.3100"/>
+        <inertia ixx="13.0741" ixy="0" ixz="0" iyy="24.2102" iyz="0" izz="13.0741"/>
+    </inertial>
+    <visual>
+        <origin xyz="-3.333571 -1.104281 -0.602025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/right_wheel_axis4_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision name="right_wheel_axis4_collision_1">
+        <geometry>
+        <sphere radius="0.5645" />
+        </geometry>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+    </collision>
+    </link>
+
+    <link name="right_wheel_axis3_1">
+    <inertial>
+        <origin xyz="3.472873000287535e-07 4.744911921150674e-07 4.782199595210201e-07" rpy="0 0 0"/>
+        <mass value="121.3100"/>
+        <inertia ixx="13.0741" ixy="0" ixz="0" iyy="24.2102" iyz="0" izz="13.0741"/>
+    </inertial>
+    <visual>
+        <origin xyz="-1.951571 -1.104281 -0.602025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/right_wheel_axis3_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision name="right_wheel_axis3_collision_1">
+        <geometry>
+        <sphere radius="0.5645" />
+        </geometry>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+    </collision>
+    </link>
+
+    <link name="left_wheel_axis2_1">
+    <inertial>
+        <origin xyz="3.472872989185305e-07 4.744911910048444e-07 4.782199599651094e-07" rpy="0 0 0"/>
+        <mass value="121.3100"/>
+        <inertia ixx="13.0741" ixy="0" ixz="0" iyy="24.2102" iyz="0" izz="13.0741"/>
+    </inertial>
+    <visual>
+        <origin xyz="1.798429 1.005219 -0.602025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/left_wheel_axis2_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision name="left_wheel_axis2_collision_1">
+        <geometry>
+        <sphere radius="0.5645" />
+        </geometry>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+    </collision>
+    </link>
+
+    <link name="left_steer_axis2_link">
+    <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.01"/>
+        <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+    </link>
+
+    <link name="right_wheel_axis2_1">
+    <inertial>
+        <origin xyz="3.472873000287535e-07 4.744911910048444e-07 4.782199599651094e-07" rpy="0 0 0"/>
+        <mass value="121.3100"/>
+        <inertia ixx="13.0741" iyy="24.2102" izz="13.0741" ixy="0" iyz="0" ixz="0"/>
+    </inertial>
+    <visual>
+        <origin xyz="1.798429 -1.125781 -0.602025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/right_wheel_axis2_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision name="right_wheel_axis2_collision_1">
+        <geometry>
+        <sphere radius="0.5645" />
+        </geometry>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+    </collision>
+    </link>
+
+    <link name="right_steer_axis2_link">
+    <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.01"/>
+        <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+    </link>
+
+    <link name="left_wheel_axis1_1">
+    <inertial>
+        <origin xyz="3.472872993626197e-07 4.744911910048444e-07 4.78219960187154e-07" rpy="0 0 0"/>
+        <mass value="121.3100"/>
+        <inertia ixx="13.0741" ixy="0" ixz="0" iyy="24.2102" iyz="0" izz="13.0741"/>
+    </inertial>
+    <visual>
+        <origin xyz="3.698429 1.005219 -0.602025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/left_wheel_axis1_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision name="left_wheel_axis1_collision_1">
+        <geometry>
+        <sphere radius="0.5645" />
+        </geometry>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+    </collision>
+    </link>
+
+    <link name="left_steer_axis1_link">
+    <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.01"/>
+        <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+    </link>
+
+    <link name="right_wheel_axis1_1">
+    <inertial>
+        <origin xyz="3.472872993626197e-07 4.744911910048444e-07 4.78219960187154e-07" rpy="0 0 0"/>
+        <mass value="121.3100"/>
+        <inertia ixx="13.0741" ixy="0" ixz="0" iyy="24.2102" iyz="0" izz="13.0741"/>
+    </inertial>
+    <visual>
+        <origin xyz="3.698429 -1.125781 -0.602025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/right_wheel_axis1_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision name="right_wheel_axis1_collision_1">
+        <geometry>
+        <sphere radius="0.5645" />
+        </geometry>
+        <origin xyz="0 0 0" rpy="0 0 0" />
+    </collision>
+    </link>
+
+    <link name="right_steer_axis1_link">
+    <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.01"/>
+        <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+    </link>
+
+    <link name="ouster_link_1">
+    <inertial>
+        <origin xyz="1.868054972931077e-07 0.00045335605831459125 0.03028987258186744" rpy="0 0 0"/>
+        <mass value="2.207020426893562"/>
+        <inertia ixx="0.001578" iyy="0.001594" izz="0.001651" ixy="0.0" iyz="-1.2e-05" ixz="-0.0"/>
+    </inertial>
+    <visual>
+        <origin xyz="5.034679 -0.060281 -3.602025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/ouster_link_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision>
+        <origin xyz="5.034679 -0.060281 -3.602025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/ouster_link_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+    </collision>
+    </link>
+
+    <link name="osdome_link1_1">
+    <inertial>
+        <origin xyz="-0.031863759259128877 0.00046348026222201716 3.249757445367152e-07" rpy="0 0 0"/>
+        <mass value="2.304753434462314"/>
+        <inertia ixx="0.001576" iyy="0.001682" izz="0.001666" ixy="1.3e-05" iyz="0.0" ixz="0.0"/>
+    </inertial>
+    <visual>
+        <origin xyz="5.130429 -0.060281 -3.502025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/osdome_link1_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision>
+        <origin xyz="5.130429 -0.060281 -3.502025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/osdome_link1_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+    </collision>
+    </link>
+
+    <link name="osdome_link2_1">
+    <inertial>
+        <origin xyz="5.005315175665714e-07 0.0004625137215177322 -0.03186362832646772" rpy="0 0 0"/>
+        <mass value="2.304753434462314"/>
+        <inertia ixx="0.001666" iyy="0.001682" izz="0.001576" ixy="-0.0" iyz="1.3e-05" ixz="-0.0"/>
+    </inertial>
+    <visual>
+        <origin xyz="5.030429 1.33101 -3.402025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/osdome_link2_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision>
+        <origin xyz="5.030429 1.33101 -3.402025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/osdome_link2_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+    </collision>
+    </link>
+
+    <link name="osdome_link3_1">
+    <inertial>
+        <origin xyz="-3.998840369945356e-09 0.0004634825472478177 -0.03186362832646994" rpy="0 0 0"/>
+        <mass value="2.304753434462314"/>
+        <inertia ixx="0.001666" iyy="0.001682" izz="0.001576" ixy="-0.0" iyz="1.3e-05" ixz="-0.0"/>
+    </inertial>
+    <visual>
+        <origin xyz="5.030008 -1.460281 -3.402025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/osdome_link3_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="black"/>
+    </visual>
+    <collision>
+        <origin xyz="5.030008 -1.460281 -3.402025" rpy="0 0 0"/>
+        <geometry>
+        <mesh filename="package://truck_description/meshes/osdome_link3_1.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+    </collision>
+    </link>
+
+    <joint name="left_rot_joint_a4" type="continuous">
+    <origin xyz="3.333571 -0.983719 0.602025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="left_wheel_axis4_1"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+    <gazebo>
+        <dynamics>
+        <spring_stiffness>50</spring_stiffness>
+        <spring_reference>0.0</spring_reference>
+        <damping>2.0</damping>
+        </dynamics>
+    </gazebo>
+    </joint>
+
+    <joint name="left_rot_joint_a3" type="continuous">
+    <origin xyz="1.951571 -0.983719 0.602025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="left_wheel_axis3_1"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+    </joint>
+
+    <joint name="right_rot_joint_a4" type="continuous">
+    <origin xyz="3.333571 1.104281 0.602025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="right_wheel_axis4_1"/>
+    <axis xyz="-0.0 -1.0 -0.0"/>
+    </joint>
+
+    <joint name="right_rot_joint_a3" type="continuous">
+    <origin xyz="1.951571 1.104281 0.602025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="right_wheel_axis3_1"/>
+    <axis xyz="-0.0 -1.0 -0.0"/>
+    </joint>
+
+    <joint name="left_rot_joint_a2" type="continuous">
+    <!-- <origin xyz="-1.798429 -1.005219 0.602025" rpy="0 0 0"/> -->
+    <origin xyz="-0.0 0.0 0.0" rpy="0 0 0"/>
+    <parent link="left_steer_axis2_link"/>
+    <child link="left_wheel_axis2_1"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+    </joint>
+
+    <joint name="left_steer_joint_a2" type="revolute">
+    <origin xyz="-1.798429 -1.005219 0.602025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="left_steer_axis2_link"/>
+    <axis xyz="0.0 -0.0 1.0"/>
+    <limit upper="0.523599" lower="-0.523599" effort="100" velocity="100"/>
+    </joint>
+
+    <joint name="right_rot_joint_a2" type="continuous">
+    <!-- <origin xyz="-1.798429 1.125781 0.602025" rpy="0 0 0"/> -->
+    <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+    <parent link="right_steer_axis2_link"/>
+    <child link="right_wheel_axis2_1"/>
+    <axis xyz="-0.0 -1.0 -0.0"/>
+    </joint>
+
+    <joint name="right_steer_joint_a2" type="revolute">
+    <origin xyz="-1.798429 1.125781 0.602025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="right_steer_axis2_link"/>
+    <axis xyz="-0.0 0.0 1.0"/>
+    <limit upper="0.523599" lower="-0.523599" effort="100" velocity="100"/>
+    </joint>
+
+    <joint name="left_rot_joint_a1" type="continuous">
+    <!-- <origin xyz="-3.698429 -1.005219 0.602025" rpy="0 0 0"/> -->
+    <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+    <parent link="left_steer_axis1_link"/>
+    <child link="left_wheel_axis1_1"/>
+    <axis xyz="0.0 -1.0 0.0"/>
+    </joint>
+
+    <joint name="left_steer_joint_a1" type="revolute">
+    <origin xyz="-3.698429 -1.005219 0.602025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="left_steer_axis1_link"/>
+    <axis xyz="0.0 -0.0 1.0"/>
+    <limit upper="0.523599" lower="-0.523599" effort="100" velocity="100"/>
+    </joint>
+
+    <joint name="right_rot_joint_a1" type="continuous">
+    <origin xyz="-0.0 0.0 0.0" rpy="0 0 0"/>
+    <parent link="right_steer_axis1_link"/>
+    <child link="right_wheel_axis1_1"/>
+    <axis xyz="-0.0 -1.0 -0.0"/>
+    </joint>
+
+    <joint name="right_steer_joint_a1" type="revolute">
+    <origin xyz="-3.698429 1.125781 0.602025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="right_steer_axis1_link"/>
+    <axis xyz="-0.0 0.0 1.0"/>
+    <limit upper="0.523599" lower="-0.523599" effort="100" velocity="100"/>
+    </joint>
+
+    <joint name="ouster_joint" type="fixed">
+    <origin xyz="-5.034679 0.060281 3.602025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="ouster_link_1"/>
+    </joint>
+
+    <joint name="osdome_joint1" type="fixed">
+    <origin xyz="-5.130429 0.060281 3.502025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="osdome_link1_1"/>
+    </joint>
+
+    <joint name="Rigid 16" type="fixed">
+    <origin xyz="-5.030429 -1.33101 3.402025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="osdome_link2_1"/>
+    </joint>
+
+    <joint name="Rigid 17" type="fixed">
+    <origin xyz="-5.030008 1.460281 3.402025" rpy="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="osdome_link3_1"/>
+    </joint>
+
+</model>
+
+</sdf>
