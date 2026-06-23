@@ -125,6 +125,24 @@ class Callbacks:
             self.imu_received = False
             self.node.triggered = True
 
+    def update_errors(self):
+        
+        self.node.state_x1 = np.array([
+            self.x,
+            self.y,
+            self.roll,
+            self.yaw
+        ], dtype=np.float32)
+
+        self.node.state_x2 = np.array([
+            self.vx,
+            self.vy,
+            self.dot_roll,
+            self.dot_yaw
+        ], dtype=np.float32)
+
+        self.node.estimated_error_x1 = self.node.state_x1 - self.node.observed_state_x1
+        self.node.estimated_error_x2 = self.node.state_x2 - self.node.observed_state_x2
 
 
 # def tf_callback(self, msg):

@@ -182,5 +182,22 @@ def generate_launch_description():
                 }
             ]
         ),
+        # DeclareLaunchArgument('scale_tanh', default_value='10'),
+        # DeclareLaunchArgument('des_vel_x', default_value='10'),
+        # DeclareLaunchArgument('des_omega_z', default_value='0.6'),
+        # Node(
+        #     package='observer',
+        #     executable='observer',
+        #     name='HOSMO',
+        #     output='screen',
+        #     parameters=[
+        #         {   
+        #             "scale_tanh": LaunchConfiguration('scale_tanh'),
+        #             "des_vel_x": LaunchConfiguration('des_vel_x'),
+        #             "des_omega_z": LaunchConfiguration('des_omega_z'),
+        #             'use_sim_time': True
+        #         }
+        #     ]
+        # ),
     ]
 )
