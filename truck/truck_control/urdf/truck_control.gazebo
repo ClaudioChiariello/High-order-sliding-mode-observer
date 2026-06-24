@@ -10,18 +10,7 @@
   </plugin>
 </gazebo>
 
-<!--plugin tag necessary to compute "perfect" (i.e., "ground truth") odometry of application point-->
-<gazebo>
-  <plugin
-    filename="gz-sim-odometry-publisher-system"
-    name="gz::sim::systems::OdometryPublisher">
-    <odom_topic>odometry</odom_topic>
-    <tf_topic>tf</tf_topic>
-    <robot_base_frame>base_footprint</robot_base_frame>
-    <odom_frame>world</odom_frame>
-    <publish_link_pose>true</publish_link_pose>
-  </plugin>
-</gazebo>
+
 
 <xacro:include filename="$(find truck_description)/urdf/truck.gazebo" />
 </robot>

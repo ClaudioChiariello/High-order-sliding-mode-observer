@@ -91,7 +91,7 @@ class robot:
 
         return total_mass, Ix, Iz
 
-    def dynamics(self, state, Fx, Mz):
+    def dynamics(self, state, Fx, Mz, add_disturb):
             """
             state =
             [x,y,roll,yaw,vx,vy,p,r]
@@ -106,19 +106,21 @@ class robot:
             m = self.mass
             Ix = self.Ix
             Iz = self.Iz
+            dist = 0.0
 
-            dx = vx*np.cos(psi) - vy*np.sin(psi)
+            if(add_disturb):
+                 dist = np.sin(4.0*np.pi/180.0*(2.0*np.pi/5)**2)
+
+            dx = vx*np.cos(psi) - vy*np.sin(psi) 
             dy = vx*np.sin(psi) + vy*np.cos(psi)
-            # dx = vx
-            # dy = vy
             dphi = p
             dpsi = r
 
-            dvx = Fx/m + r*vy
+            dvx = Fx/m + r*vy  + dist
             #dvy = Fy/m - r*vx
-            dvy = -r*vx
+            dvy = -r*vx + dist
 
-            dp = (m*dvy*h  + m*g*np.sin(phi + epsilon) -Cr*dphi - Kr*phi )/Ix
+            dp = (m*dvy*h  + m*g*np.sin(phi + epsilon) -Cr*dphi - Kr*phi )/Ix + dist
             dr = Mz/Iz
 
             return np.array([

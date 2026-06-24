@@ -15,36 +15,25 @@ node lifecycle
 
 It just needs access to the node's state. So Inheritance would be a good solution since the class Callbacks would become a node"""
  
-
-def angular_velocity_to_rpy_rates(roll, pitch, yaw_rate_body):
-    """
-    Convert body angular velocity [p,q,r] to roll/pitch/yaw derivatives.
-
-    roll: phi
-    pitch: theta
-    yaw_rate_body: np.array([p,q,r])
-    """
-
-    phi = roll
-    theta = pitch
-
-    p, q, r = yaw_rate_body
-
-    T = np.array([
-        [1, np.sin(phi)*np.tan(theta),  np.cos(phi)*np.tan(theta)],
-        [0, np.cos(phi),              -np.sin(phi)],
-        [0, np.sin(phi)/np.cos(theta), np.cos(phi)/np.cos(theta)]
-    ])
-
-    return T @ np.array([p, q, r])
-
+ 
 class Callbacks:
 
     def __init__(self, node):
         self.node = node
         self.imu_received = False
         self.odom_received = False
+        self.roll = np.float32(0.0)
+        self.yaw = np.float32(0.0)
+        self.x = np.float32(0.0)
+        self.y = np.float32(0.0)
+        self.vx = np.float32(0.0)
+        self.vy = np.float32(0.0)
+
+        self.dot_roll = np.float32(0.0)
+        self.dot_yaw = np.float32(0.0)
+        self.wz = 0.0
     
+    #Called every 20ms (50Hz) 
     def imu_callback(self, msg):
         
         q = [
@@ -55,23 +44,19 @@ class Callbacks:
         ]
 
         # in radians
-        self.roll, pitch, self.yaw = euler_from_quaternion(q)
+        self.roll, self.pitch, self.yaw = euler_from_quaternion(q)
 
         # Angular velocity
         wx = msg.angular_velocity.x
         wy = msg.angular_velocity.y
-        wz = msg.angular_velocity.z
+        self.wz = msg.angular_velocity.z
 
-        rpy_dot = angular_velocity_to_rpy_rates(
-            self.roll,
-            pitch,
-            [wx,wy,wz]
+        rpy_dot = self.angular_velocity_to_rpy_rates(
+            [wx, wy, self.wz]
         )
 
         self.dot_roll, _, self.dot_yaw = rpy_dot
 
-
-        # Linear acceleration
         ax = msg.linear_acceleration.x
         ay = msg.linear_acceleration.y
         az = msg.linear_acceleration.z
@@ -80,10 +65,11 @@ class Callbacks:
         #     f"IMU acc: [{ax:.2f}, {ay:.2f}, {az:.2f}] "
         #     f"gyro: [{wx:.2f}, {wy:.2f}, {wz:.2f}]"
         # )
+        
         self.imu_received = True
         self.update_error()
 
-
+    #Called every 50ms (20Hz) 
     def odom_callback(self, odom_msg):
 
         self.x = odom_msg.pose.pose.position.x
@@ -92,57 +78,57 @@ class Callbacks:
         self.vx = odom_msg.twist.twist.linear.x
         self.vy = odom_msg.twist.twist.linear.y
 
-        # self.node.get_logger().info(
-        #     f"Odom x={self.x:.2f} y={self.y:.2f} vx={self.vx:.2f}"
-        # )
-
         self.odom_received = True
         self.update_error()
 
 
     def update_error(self):
 
-        if self.imu_received and self.odom_received:
+        #if self.imu_received and self.odom_received:
             
-            self.node.state_x1 = np.array([
-                self.x,
-                self.y,
-                self.roll,
-                self.yaw
-            ], dtype=np.float32)
-
-            self.node.state_x2 = np.array([
-                self.vx,
-                self.vy,
-                self.dot_roll,
-                self.dot_yaw
-            ], dtype=np.float32)
-
-            self.node.estimated_error_x1 = self.node.state_x1 - self.node.observed_state_x1
-            self.node.estimated_error_x2 = self.node.state_x2 - self.node.observed_state_x2
-
-            self.odom_received = False
-            self.imu_received = False
-            self.node.triggered = True
-
-    def update_errors(self):
-        
-        self.node.state_x1 = np.array([
+        self.node.observed_state_x1 = np.array([
             self.x,
             self.y,
             self.roll,
             self.yaw
         ], dtype=np.float32)
 
-        self.node.state_x2 = np.array([
+        self.node.observed_state_x2 = np.array([
             self.vx,
             self.vy,
             self.dot_roll,
             self.dot_yaw
         ], dtype=np.float32)
 
-        self.node.estimated_error_x1 = self.node.state_x1 - self.node.observed_state_x1
-        self.node.estimated_error_x2 = self.node.state_x2 - self.node.observed_state_x2
+        # self.node.estimated_error_x1 = self.node.state[:4] - self.node.observed_state_x1
+        # self.node.estimated_error_x2 = self.node.state[4:] - self.node.observed_state_x2
+
+        #print(f'self.node.state[4:] {self.node.observed_state_x1}')
+        # self.odom_received = False
+        # self.imu_received = False
+        # self.node.triggered = True
+ 
+    def angular_velocity_to_rpy_rates(self, yaw_rate_body):
+        """
+        Convert body angular velocity [p,q,r] to roll/pitch/yaw derivatives.
+
+        roll: phi
+        pitch: theta
+        yaw_rate_body: np.array([p,q,r])
+        """
+
+        phi = self.roll
+        theta = self.pitch
+
+        p, q, r = yaw_rate_body
+
+        T = np.array([
+            [1, np.sin(phi)*np.tan(theta),  np.cos(phi)*np.tan(theta)],
+            [0, np.cos(phi),              -np.sin(phi)],
+            [0, np.sin(phi)/np.cos(theta), np.cos(phi)/np.cos(theta)]
+        ])
+
+        return T @ np.array([p, q, r])
 
 
 # def tf_callback(self, msg):

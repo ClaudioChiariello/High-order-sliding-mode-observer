@@ -301,7 +301,7 @@
 <gazebo reference="imu_link">
   <sensor name="imu" type="imu">
     <topic>/imu/data</topic>
-    <update_rate>100</update_rate>
+    <update_rate>50</update_rate>
     <visualize>true</visualize>
 
     <imu>
@@ -334,11 +334,24 @@
 </gazebo>
 
 <gazebo>
+
   <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
     <render_engine>ogre2</render_engine>
   </plugin>
-  <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu" />
-</gazebo>
 
+  <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+ 
+  <plugin
+    filename="gz-sim-odometry-publisher-system"
+    name="gz::sim::systems::OdometryPublisher">
+    <odom_topic>odometry</odom_topic>
+    <tf_topic>tf</tf_topic>
+    <robot_base_frame>base_footprint</robot_base_frame>
+    <odom_frame>world</odom_frame>
+    <publish_link_pose>true</publish_link_pose>
+    <odom_publish_frequency>20</odom_publish_frequency>
+  </plugin>
+  
+</gazebo>
 
 </robot>

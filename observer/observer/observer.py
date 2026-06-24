@@ -31,11 +31,8 @@ class TruckStateObserver(Node):
         self.declare_parameter("des_vel_x", 10.0)
         self.des_vel_x = self.get_parameter('des_vel_x').value
 
-        self.declare_parameter("des_omega_z", 1.0)
+        self.declare_parameter("des_omega_z", 0.5) #giving a desired angular vel prevent the velocity to reach a steady state
         self.des_omega_z = self.get_parameter('des_omega_z').value
-
-        self.declare_parameter("variable_dt", True)
-        self.variable_dt = self.get_parameter('variable_dt').value
 
         self.total_time = 0.0
         # self.x = np.float32(0.0)
@@ -50,10 +47,13 @@ class TruckStateObserver(Node):
         self.state_x2 = np.zeros(4, dtype="float32")
         self.observed_state_x2= np.zeros(4, dtype="float32")
         self.estimate_error_x2 = np.zeros(4, dtype="float32")
-
+    
         self.triggered = False
         self.state = np.concatenate(
             (self.state_x1, self.state_x2)
+        )
+        self.observed_state = np.concatenate(
+            (self.observed_state_x1, self.observed_state_x2)
         )
 
         self.truck = robot.robot()
@@ -83,18 +83,18 @@ class TruckStateObserver(Node):
         if self.get_parameter("use_sim_time").value:
             self.fixed_dt = 1e-4 #lo rendi abbastanza basso da usare il tempo di gazebo
         else:
-            self.fixed_dt = 1e-2
+            self.fixed_dt = 1e-2 #The observer should run at 10ms
 
         self.imu_sub = self.create_subscription(
             Imu,
-            '/imu/data',
+            '/imu/data', #50Hz
             self.cb.imu_callback,
             10
         )
 
         self.odom_sub = self.create_subscription(
             Odometry,
-            '/odometry',
+            '/odometry', #20Hz
             self.cb.odom_callback,
             10
         )
@@ -110,9 +110,11 @@ class TruckStateObserver(Node):
             '/cmd_vel',
             10
         )
+
         self.counter = 0
         self.t0 = self.get_clock().now()
         self.early = None
+
 
     def GazeboControl(self):
         msg = Twist()
@@ -146,46 +148,65 @@ class TruckStateObserver(Node):
         dt = (now - self.early).nanoseconds * 1e-9
         self.early = now
 
-
         u = self.PdController(
             self.des_vel_x,
             self.des_omega_z,
             dt = dt
         )
-        self.state = self.rk4_step(u, dt = dt)
 
-        self.counter += 1 
-        if self.counter % 100 == 0:
-            self.get_logger().info(
-                f"x={self.state[0]:.2f}, "
-                f"vx={self.state[4]:.2f}, "
-                f"dt={dt:.5f}"
-            )
-
-    def HighOrderObserver(self):
-        # Questo ti farà aspettare i dati che arrivano ogni 50ms
-        if not self.triggered:
-            return
+        Fx, Mz = u
         
-        self.triggered = False 
-        lambdaa = 100.0
+        self.estimate_error_x1 = self.state[:4] - self.observed_state[:4]
+
+        self.state += self.truck.dynamics(self.state, Fx, Mz, add_disturb = True)*dt
+
+        #self.state = self.rk4_step(self.state, Fx, Mz, dt, dist = True)
+
+        dot_observed_state = self.truck.dynamics(self.observed_state, Fx, Mz, add_disturb = False)
+
+        self.HighOrderObserver(dot_observed_state, dt)
+ 
+
+    def HighOrderObserver(self, dot_observed_state, dt):
+        # Questo ti farà aspettare i dati che arrivano ogni 50ms
+        # if not self.triggered:
+        #     return
+        # self.triggered = False 
+
+        p = 0.001
+        alpha = 2*np.abs(dot_observed_state[:4]) + 250.0
+        lambdaa = np.sqrt(2/(alpha - 2*np.abs(dot_observed_state[:4])))* ( (alpha + 2*np.abs(dot_observed_state[:4]))*(1+p))/(1-p) + 10
         delta = np.sqrt(np.abs(self.estimate_error_x1))
         correction_term = lambdaa*delta*np.tanh(self.scale_tanh*self.estimate_error_x1)
-        alpha = 100
-        dot_x1_tilde = self.state[:4] + correction_term
-        dot_x2_tilde = self.state[4:] + alpha*np.tanh(self.scale_tanh*self.estimate_error_x1)
 
+        dot_observed_state[:4] = dot_observed_state[:4] + correction_term
+        dot_observed_state[4:] = dot_observed_state[4:] + alpha*np.tanh(self.scale_tanh*self.estimate_error_x1)
+        
+        self.observed_state += dot_observed_state*dt
 
+        if self.counter % 100 == 0:
+            self.get_logger().info(
+                f"real (estimated) \n"
+                f"Pos : x={self.state[0]:7.3f} ({self.observed_state[0]:7.3f})  "
+                f"y={self.state[1]:7.3f} ({self.observed_state[1]:7.3f})\n"
+                f"Ang : r={self.state[2]:7.3f} ({self.observed_state[2]:7.3f})  "
+                f"ψ={self.state[3]:7.3f} ({self.observed_state[3]:7.3f})\n"
+                f"Vel : vx={self.state[4]:7.3f} ({self.observed_state[4]:7.3f})  "
+                f"vy={self.state[5]:7.3f} ({self.observed_state[5]:7.3f})\n"
+                f"Rate: wx={self.state[6]:7.3f} ({self.observed_state[6]:7.3f})  "
+                f"wz={self.state[7]:7.3f} ({self.observed_state[7]:7.3f})\n"
+                f"dt={dt:.4f}"
+            )
 
     def PdController(self, vx_des, des_omega_z, dt):
-        Kp = 10000
-        Kd = 10
+        Kp = [1000, 10]
+        Kd = [10, 0.1]
         e_x = vx_des - self.state[4]
         #e_y = self.state[5] - vy_des
-        e_wz = des_omega_z - self.state[7]
-
-        Fx = Kp*e_x + Kd*((e_x - self.previous_e[0])/dt)
-        Mz = Kp*e_wz + Kd*((e_wz - self.previous_e[2])/dt)
+        e_wz = des_omega_z - self.cb.wz
+        
+        Fx = Kp[0]*e_x + Kd[0]*((e_x - self.previous_e[0])/dt)
+        Mz = Kp[1]*e_wz + Kd[1]*((e_wz - self.previous_e[2])/dt)
 
         self.previous_e[:] = [e_x, 0, e_wz]
         return [Fx, Mz]
@@ -193,19 +214,15 @@ class TruckStateObserver(Node):
 
     """be carefull in calling this every self.dt steps, otherwise you are not integrating 
     with the correct timestep. """
-    def rk4_step(self,  u, dt):
+    def rk4_step(self, state, Fx, Mz, dt, dist):
 
-        Fx, Mz = u
+        k1 = self.truck.dynamics(state, Fx, Mz, dist)
+        k2 = self.truck.dynamics(state + 0.5*dt*k1, Fx, Mz, dist)
+        k3 = self.truck.dynamics(state + 0.5*dt*k2, Fx, Mz, dist)
+        k4 = self.truck.dynamics(state + dt*k3, Fx, Mz, dist)
 
-        k1 = self.truck.dynamics(self.state, Fx, Mz)
-        k2 = self.truck.dynamics(self.state + 0.5*dt*k1, Fx, Mz)
-        k3 = self.truck.dynamics(self.state + 0.5*dt*k2, Fx, Mz)
-        k4 = self.truck.dynamics(self.state + dt*k3, Fx, Mz)
+        return state + dt/6.0 * (k1 + 2*k2 + 2*k3 + k4)
 
-        return self.state + dt/6.0 * (k1 + 2*k2 + 2*k3 + k4)
-
-
-    
 
 def main(args=None):
 
