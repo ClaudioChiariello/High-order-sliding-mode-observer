@@ -5,17 +5,23 @@ from rclpy.node import Node
 
 import numpy as np
 
-from sensor_msgs.msg import JointState
 from sensor_msgs.msg import Imu
 from nav_msgs.msg import Odometry
-from tf2_msgs.msg import TFMessage
+import tf2_ros
+from tf_transformations import quaternion_matrix
 
-from scipy.spatial.transform import Rotation
-
-from .gather_sensors import Callbacks
-from urdf_parser_py.urdf import URDF
+from .gazebo_model import Callbacks
 from . import robot
+from observer.utils.data_plotter import DataPlotter
+from .states import state as s
+
 from geometry_msgs.msg import Twist
+
+
+from scipy.spatial.transform import Rotation as R
+from rclpy.callback_groups import ReentrantCallbackGroup
+
+ 
 
 
 """dot_x1 = x2                      x = [x1] -> [x,y,roll,yaw]
@@ -25,39 +31,33 @@ class TruckStateObserver(Node):
     def __init__(self):
         super().__init__('truck_state_observer')
 
+        self.group = ReentrantCallbackGroup()
+
         self.declare_parameter('scale_tanh', 10.0)
         self.scale_tanh = self.get_parameter('scale_tanh').value
 
-        self.declare_parameter("des_vel_x", 10.0)
+        self.declare_parameter("des_vel_x", 5.0)
         self.des_vel_x = self.get_parameter('des_vel_x').value
 
         self.declare_parameter("des_omega_z", 0.5) #giving a desired angular vel prevent the velocity to reach a steady state
         self.des_omega_z = self.get_parameter('des_omega_z').value
+        
+        self.UseGazeboSim = False
+        
+        self.rotation_body2world = np.zeros((3,3), dtype='float32')
+        self.ex_int = 0.0
+        self.e_wz_int = 0.0
 
-        self.total_time = 0.0
-        # self.x = np.float32(0.0)
-        # self.y = np.float32(0.0)
-        # self.roll = np.float32(0.0)
-        # self.yaw = np.float32(0.0)
+        num_states = 8
 
-        self.state_x1 = np.zeros(4, dtype="float32")
-        self.observed_state_x1 = np.zeros(4, dtype="float32")
+        self.state = np.zeros(num_states, dtype="float32")
+        self.observed_state = np.zeros(num_states, dtype="float32")
+
         self.estimate_error_x1 = np.zeros(4, dtype="float32")
-
-        self.state_x2 = np.zeros(4, dtype="float32")
-        self.observed_state_x2= np.zeros(4, dtype="float32")
-        self.estimate_error_x2 = np.zeros(4, dtype="float32")
-    
-        self.triggered = False
-        self.state = np.concatenate(
-            (self.state_x1, self.state_x2)
-        )
-        self.observed_state = np.concatenate(
-            (self.observed_state_x1, self.observed_state_x2)
-        )
 
         self.truck = robot.robot()
         self.cb = Callbacks(self)
+        self.plotter = DataPlotter("results")
 
         self.previous_e = np.zeros(3,dtype="float32")
 
@@ -81,7 +81,21 @@ class TruckStateObserver(Node):
             - if use_sim_time:=False Gazebo is ignored, e la get_now si aggiorna con i tempi del sistema"""
         
         if self.get_parameter("use_sim_time").value:
-            self.fixed_dt = 1e-4 #lo rendi abbastanza basso da usare il tempo di gazebo
+            self.fixed_dt = 1e-3 #lo rendi abbastanza basso da usare il tempo di gazebo
+            self.UseGazeboSim = True
+
+            self.timer_gazebo = self.create_timer(
+                self.fixed_dt, 
+                self.GazeboControl,
+                callback_group=self.group
+            )
+
+            self.gz_pub_ = self.create_publisher(
+                Twist,
+                '/cmd_vel',
+                10
+            )
+
         else:
             self.fixed_dt = 1e-2 #The observer should run at 10ms
 
@@ -100,65 +114,50 @@ class TruckStateObserver(Node):
         )
  
         # The controller frequency will always depend on this, and so the observer if it runs in the callback
-        self.timer = self.create_timer(
+        self.timer_observer = self.create_timer(
             self.fixed_dt, 
-            self.GazeboSim
-        )
-
-        self.publisher_ = self.create_publisher(
-            Twist,
-            '/cmd_vel',
-            10
+            self.ModelSimulator,
+            callback_group=self.group
         )
 
         self.counter = 0
         self.t0 = self.get_clock().now()
         self.early = None
 
+        self.time_data = []
+        self.state_data = []
+        self.observed_data = []
+        self.sim_time = 0.0
+
 
     def GazeboControl(self):
         msg = Twist()
-
         # Linear velocity (m/s)
         msg.linear.x = self.des_vel_x
         msg.linear.y = 0.0
-        msg.linear.z = 0.0
-
-        # Angular velocity (rad/s)
-        msg.angular.x = 0.0
-        msg.angular.y = 0.0
         msg.angular.z = self.des_omega_z
 
-        self.publisher_.publish(msg)
+        self.gz_pub_.publish(msg)
 
-    def GazeboSim(self):
-         
-        """Use the Gazebo timestamp if use_sim_time is true. This code will use the Gazebo sim time, because
-        the GazeboSim ha una frequenza minore di quella a cui viene chiamata la callback del publisher, quindi
-        il get_clock().now() - previous_clock() restituirà il tempo trascorso in Gazebo
-        
-        When the use_sim_time is False, this will return 10ms, because the fixed_dt is greater than the 
-        GazeboSim dt (che poi non verrà più cagato visto che use_sim_time è falso),
-        e quindi questo codice runnerà sempre a 10ms."""
-        
-        now = self.get_clock().now()
-        if self.early is None:
-            self.early = now
-            return
-        dt = (now - self.early).nanoseconds * 1e-9
-        self.early = now
 
-        u = self.PdController(
-            self.des_vel_x,
-            self.des_omega_z,
-            dt = dt
-        )
-
-        Fx, Mz = u
+    def ModelSimulator(self):
         
+        # now = self.get_clock().now()
+        # if self.early is None:
+        #     self.early = now
+        #     return
+        # dt = (now - self.early).nanoseconds * 1e-9
+        # self.early = now
+        dt = self.fixed_dt
+
+        if(not self.UseGazeboSim):
+            u = self.PdController(dt = dt)
+            Fx, Mz = u
+            self.state += self.truck.dynamics(self.state, Fx, Mz, add_disturb = True)*dt
+        else:
+            self.state = self.cb.gazebo_state
+
         self.estimate_error_x1 = self.state[:4] - self.observed_state[:4]
-
-        self.state += self.truck.dynamics(self.state, Fx, Mz, add_disturb = True)*dt
 
         #self.state = self.rk4_step(self.state, Fx, Mz, dt, dist = True)
 
@@ -167,15 +166,12 @@ class TruckStateObserver(Node):
         self.HighOrderObserver(dot_observed_state, dt)
  
 
-    def HighOrderObserver(self, dot_observed_state, dt):
-        # Questo ti farà aspettare i dati che arrivano ogni 50ms
-        # if not self.triggered:
-        #     return
-        # self.triggered = False 
 
-        p = 0.001
-        alpha = 2*np.abs(dot_observed_state[:4]) + 250.0
-        lambdaa = np.sqrt(2/(alpha - 2*np.abs(dot_observed_state[:4])))* ( (alpha + 2*np.abs(dot_observed_state[:4]))*(1+p))/(1-p) + 10
+    def HighOrderObserver(self, dot_observed_state, dt):
+
+        p = 0.01
+        alpha = 2*np.abs(dot_observed_state[:4]) + 550.0
+        lambdaa = np.sqrt(2/(alpha - 2*np.abs(dot_observed_state[:4])))* ( (alpha + 2*np.abs(dot_observed_state[:4]))*(1+p))/(1-p) + 1
         delta = np.sqrt(np.abs(self.estimate_error_x1))
         correction_term = lambdaa*delta*np.tanh(self.scale_tanh*self.estimate_error_x1)
 
@@ -183,37 +179,72 @@ class TruckStateObserver(Node):
         dot_observed_state[4:] = dot_observed_state[4:] + alpha*np.tanh(self.scale_tanh*self.estimate_error_x1)
         
         self.observed_state += dot_observed_state*dt
+        
+        # Save variables for Plotting
+        self.sim_time += dt
+        self.time_data.append(self.sim_time)
+        self.state_data.append(
+            self.state.copy()
+        )
+        self.observed_data.append(
+            self.observed_state.copy()
+        )
 
+        st = self.state
+        obs = self.observed_state
+        self.counter+=1
+        print(self.counter)
         if self.counter % 100 == 0:
             self.get_logger().info(
-                f"real (estimated) \n"
-                f"Pos : x={self.state[0]:7.3f} ({self.observed_state[0]:7.3f})  "
-                f"y={self.state[1]:7.3f} ({self.observed_state[1]:7.3f})\n"
-                f"Ang : r={self.state[2]:7.3f} ({self.observed_state[2]:7.3f})  "
-                f"ψ={self.state[3]:7.3f} ({self.observed_state[3]:7.3f})\n"
-                f"Vel : vx={self.state[4]:7.3f} ({self.observed_state[4]:7.3f})  "
-                f"vy={self.state[5]:7.3f} ({self.observed_state[5]:7.3f})\n"
-                f"Rate: wx={self.state[6]:7.3f} ({self.observed_state[6]:7.3f})  "
-                f"wz={self.state[7]:7.3f} ({self.observed_state[7]:7.3f})\n"
+                f"real (estimated)\n"
+                f"Pos : x={st[s.X]:7.3f} ({obs[s.X]:7.3f})  "
+                f"y={st[s.Y]:7.3f} ({obs[s.Y]:7.3f})\n"
+                f"Ang : r={st[s.ROLL]:7.3f} ({obs[s.ROLL]:7.3f})  "
+                f"ψ={st[s.YAW]:7.3f} ({obs[s.YAW]:7.3f})\n"
+                f"Vel : vx={st[s.VX]:7.3f} ({obs[s.VX]:7.3f})  "
+                f"vy={st[s.VY]:7.3f} ({obs[s.VY]:7.3f})\n"
+                f"Rate: wx={st[s.WX]:7.3f} ({obs[s.WX]:7.3f})  "
+                f"wz={st[s.WZ]:7.3f} ({obs[s.WZ]:7.3f})\n"
                 f"dt={dt:.4f}"
             )
 
-    def PdController(self, vx_des, des_omega_z, dt):
-        Kp = [1000, 10]
-        Kd = [10, 0.1]
-        e_x = vx_des - self.state[4]
-        #e_y = self.state[5] - vy_des
-        e_wz = des_omega_z - self.cb.wz
-        
-        Fx = Kp[0]*e_x + Kd[0]*((e_x - self.previous_e[0])/dt)
-        Mz = Kp[1]*e_wz + Kd[1]*((e_wz - self.previous_e[2])/dt)
 
+    def PdController(self, dt):
+
+        if(not self.UseGazeboSim):
+            roll = self.state[s.ROLL]
+            pitch = 0.0
+            yaw = self.state[s.YAW]
+
+            self.rotation_body2world = R.from_euler(
+                'xyz',
+                [roll, pitch, yaw]
+            ).as_matrix().T
+
+        Kp = [1000, 100]
+        KI = [10, 1.0]
+        vx_des, _, des_omega_z = self.rotation_body2world @ np.array([self.des_vel_x, 0, self.des_omega_z])
+        
+        e_x = vx_des - self.state[s.VX]
+        e_wz = des_omega_z - self.state[s.WZ]
+
+        derivative_term_fx = 100*((e_x - self.previous_e[0])/dt)
+        derivative_term_mz = 10*((e_wz - self.previous_e[2])/dt)
+
+        integral_term_fx = KI[0]*self.ex_int
+        integral_term_fx = KI[0]*self.e_wz_int
+
+        Fx = Kp[0]*e_x + derivative_term_fx  
+        Mz = Kp[1]*e_wz + derivative_term_mz
+ 
         self.previous_e[:] = [e_x, 0, e_wz]
+
+        self.ex_int += e_x*dt
+        self.e_wz_int += e_wz*dt
+        
         return [Fx, Mz]
     
 
-    """be carefull in calling this every self.dt steps, otherwise you are not integrating 
-    with the correct timestep. """
     def rk4_step(self, state, Fx, Mz, dt, dist):
 
         k1 = self.truck.dynamics(state, Fx, Mz, dist)
@@ -224,18 +255,77 @@ class TruckStateObserver(Node):
         return state + dt/6.0 * (k1 + 2*k2 + 2*k3 + k4)
 
 
+
+    def AtEnd(self):
+
+        state = np.array(self.state_data)
+        observed = np.array(self.observed_data)
+        time = np.array(self.time_data)
+        
+        self.plotter.plot(
+            time,
+            state[:, s.VX],
+            observed[:, s.VX],
+            ylabel="vx [m/s]",
+            filename="velocities.png"
+        )
+
+        self.plotter.plot(
+            time,
+            state[:, s.WZ],
+            observed[:, s.WZ],
+            ylabel="wz [rad/s]",
+            filename="angular_vel_z.png"
+        )
+
+    # World frame doesn't exist    
+    # def World2Robot(self):
+
+    #     tf_buffer = tf2_ros.Buffer()
+    #     # Subscribe to /tf and populate the tf_buffer
+    #     listener = tf2_ros.TransformListener(tf_buffer, self)
+        
+    #     trans = tf_buffer.lookup_transform(
+    #         "base_link",   # target frame (robot)
+    #         "world",       # source frame
+    #         rclpy.time.Time()
+    #     )
+        
+    #     t = trans.transform.translation
+    #     q = trans.transform.rotation
+
+    #     # Rotation matrix from quaternion
+    #     rotation = quaternion_matrix(
+    #         [q.x, q.y, q.z, q.w]
+    #     )
+
+    #     return rotation*np.array([self.des_vel_x, 0.0, self.des_omega_z])
+
+
 def main(args=None):
 
     rclpy.init(args=args)
 
     node = TruckStateObserver()
+    try:
+        if node.UseGazeboSim:
+            executor = rclpy.executors.MultiThreadedExecutor()
+            executor.add_node(node)
 
-    rclpy.spin(node)
+            try:
+                executor.spin()
+            finally:
+                executor.shutdown()
 
-    node.destroy_node()
+        else:
+            rclpy.spin(node)
 
-    rclpy.shutdown()
+    finally:
+        node.AtEnd()
+        node.destroy_node()
 
+        if rclpy.ok():
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

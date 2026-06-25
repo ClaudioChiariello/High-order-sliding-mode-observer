@@ -4,7 +4,6 @@ from ament_index_python.packages import get_package_share_directory
 import pinocchio
 import numpy as np
 
-
 class robot:
     def __init__(self):
         
@@ -100,7 +99,7 @@ class robot:
             x, y, phi, psi, vx, vy, p, r = state
             epsilon = 0.0
             h = 1.0
-            Cr = 0.0
+            Cr = 200000.0
             Kr = 800000
             g = -9.81
             m = self.mass
@@ -113,15 +112,16 @@ class robot:
 
             dx = vx*np.cos(psi) - vy*np.sin(psi) 
             dy = vx*np.sin(psi) + vy*np.cos(psi)
+            
             dphi = p
             dpsi = r
-
+           
             dvx = Fx/m + r*vy  + dist
             #dvy = Fy/m - r*vx
             dvy = -r*vx + dist
 
-            dp = (m*dvy*h  + m*g*np.sin(phi + epsilon) -Cr*dphi - Kr*phi )/Ix + dist
-            dr = Mz/Iz
+            dp = (m*dvy*h + m*g*np.sin(phi + epsilon) -Cr*dphi - Kr*phi )/Ix
+            dr = (Mz)/Iz
 
             return np.array([
                 dx,
@@ -133,3 +133,4 @@ class robot:
                 dp,
                 dr
             ])
+

@@ -1,8 +1,8 @@
 from sensor_msgs.msg import Imu
 from nav_msgs.msg import Odometry
 from tf2_msgs.msg import TFMessage
-from tf_transformations import euler_from_quaternion
-
+from tf_transformations import euler_from_quaternion, quaternion_matrix
+ 
 import numpy as np
 
 """A callback handler is not a ROS node. It doesn't need:
@@ -22,6 +22,7 @@ class Callbacks:
         self.node = node
         self.imu_received = False
         self.odom_received = False
+        self.gazebo_state = np.zeros(8, dtype='float32')
         self.roll = np.float32(0.0)
         self.yaw = np.float32(0.0)
         self.x = np.float32(0.0)
@@ -43,6 +44,9 @@ class Callbacks:
             msg.orientation.w
         ]
 
+        if(self.node.UseGazeboSim):
+            self.node.rotation_body2world = quaternion_matrix(q)[:3, :3].T
+      
         # in radians
         self.roll, self.pitch, self.yaw = euler_from_quaternion(q)
 
@@ -84,24 +88,17 @@ class Callbacks:
 
     def update_error(self):
 
-        #if self.imu_received and self.odom_received:
             
-        self.node.observed_state_x1 = np.array([
+        self.gazebo_state = np.array([
             self.x,
             self.y,
             self.roll,
-            self.yaw
-        ], dtype=np.float32)
-
-        self.node.observed_state_x2 = np.array([
+            self.yaw,
             self.vx,
             self.vy,
             self.dot_roll,
             self.dot_yaw
         ], dtype=np.float32)
-
-        # self.node.estimated_error_x1 = self.node.state[:4] - self.node.observed_state_x1
-        # self.node.estimated_error_x2 = self.node.state[4:] - self.node.observed_state_x2
 
         #print(f'self.node.state[4:] {self.node.observed_state_x1}')
         # self.odom_received = False
