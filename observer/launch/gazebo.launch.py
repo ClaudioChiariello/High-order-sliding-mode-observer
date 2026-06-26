@@ -171,17 +171,7 @@ def generate_launch_description():
             output='screen'
         ),
 
-        Node(
-            package='truck_control',
-            executable='truck_kinematic_control',
-            name='truck_kinematic_control',
-            output='screen',
-            parameters=[
-                {
-                    'use_sim_time': True
-                }
-            ]
-        ),
+
               
         # DeclareLaunchArgument('scale_tanh', default_value='10'),
         # DeclareLaunchArgument('des_vel_x', default_value='10'),

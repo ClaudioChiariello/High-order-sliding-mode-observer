@@ -20,8 +20,8 @@ from geometry_msgs.msg import Twist
 
 from scipy.spatial.transform import Rotation as R
 from rclpy.callback_groups import ReentrantCallbackGroup
-
- 
+from std_msgs.msg import Float64MultiArray
+from rcl_interfaces.srv import GetParameters
 
 
 """dot_x1 = x2                      x = [x1] -> [x,y,roll,yaw]
@@ -42,44 +42,12 @@ class TruckStateObserver(Node):
         self.declare_parameter("des_omega_z", 0.5) #giving a desired angular vel prevent the velocity to reach a steady state
         self.des_omega_z = self.get_parameter('des_omega_z').value
         
-        self.UseGazeboSim = False
-        
-        self.rotation_body2world = np.zeros((3,3), dtype='float32')
-        self.ex_int = 0.0
-        self.e_wz_int = 0.0
-
-        num_states = 8
-
-        self.state = np.zeros(num_states, dtype="float32")
-        self.observed_state = np.zeros(num_states, dtype="float32")
-
-        self.estimate_error_x1 = np.zeros(4, dtype="float32")
-
+        # Friend Function
         self.truck = robot.robot()
         self.cb = Callbacks(self)
         self.plotter = DataPlotter("results")
 
-        self.previous_e = np.zeros(3,dtype="float32")
-
-        """The gz integration time is 1e-3.
-            - If use_sim_time:=True and 
-                self.fixed_dt = 1e-2 
-                Gazebo_dt = 1e-3
-                Il get_now() si aggiorna con i tempi di gazebo, ma tra un get_now() e il successivo passeranno sempre
-                10ms (per via della timer callback) e quindi la frequenza di controllo resta 10ms. Nonostante la get_now 
-                si aggiorni con frequenza di 1e-3, leggerai la differenza tra una get_now e la successiva dopo 10 iterazioni
-                di gazebo (perché la callback è 10 volte più lenta), e quindi sempre 10 ms
-
-            - if use_sim_time:=True                 
-                self.fixed_dt = 1e-4 
-                Gazebo_dt = 1e-3 (LO vedi nel world)
-                il get_now() prenderà i tempi di gazebo, e tra un get_now e l'altro passeranno 1e-3, perché
-                il get_now() si aggiornerà con la frequenza di Gazebo, che ha una risoluzione di 1e-3 (da world file).
-                Credo che comunque la callback venga chiamata ogni 1e-4 secondi, ma il get_now() si è aggiornato di 1e-3, 
-                che sono i tempi di gazebo
-
-            - if use_sim_time:=False Gazebo is ignored, e la get_now si aggiorna con i tempi del sistema"""
-        
+        self.UseGazeboSim = False
         if self.get_parameter("use_sim_time").value:
             self.fixed_dt = 1e-3 #lo rendi abbastanza basso da usare il tempo di gazebo
             self.UseGazeboSim = True
@@ -96,23 +64,54 @@ class TruckStateObserver(Node):
                 10
             )
 
+            # To get the parameter from the truck_controller
+            self.steering_angle_sub = self.create_subscription(
+                Float64MultiArray,
+                '/steering_controller/commands',
+                self.steering_callback,   # callback function
+                10,
+                callback_group=self.group
+            )
+
+            self.L = np.zeros(4)
+            self.param_client = self.create_client(
+                GetParameters,
+                '/truck_kinematic_control/get_parameters'
+            )
+
+            request = GetParameters.Request()
+            request.names = ['L1', 'L2', 'L3', 'L4']
+            print("HIIII")
+            future = self.param_client.call_async(request)
+            future.add_done_callback(self.get_L_parameters)
+
+            self.imu_sub = self.create_subscription(
+                Imu,
+                '/imu/data', #50Hz
+                self.cb.imu_callback,
+                10
+            )
+
+            self.odom_sub = self.create_subscription(
+                Odometry,
+                '/odometry', #20Hz
+                self.cb.odom_callback,
+                10
+            )
         else:
             self.fixed_dt = 1e-2 #The observer should run at 10ms
 
-        self.imu_sub = self.create_subscription(
-            Imu,
-            '/imu/data', #50Hz
-            self.cb.imu_callback,
-            10
-        )
+        self.delta = np.zeros(2, dtype='float32')
+        self.rotation_body2world = np.zeros((3,3), dtype='float32')
+        
+        num_states = 8
+        self.state = np.zeros(num_states, dtype="float32")
+        self.observed_state = np.zeros(num_states, dtype="float32")
+        self.estimate_error_x1 = np.zeros(4, dtype="float32")
 
-        self.odom_sub = self.create_subscription(
-            Odometry,
-            '/odometry', #20Hz
-            self.cb.odom_callback,
-            10
-        )
- 
+        self.e_int = np.zeros(2,dtype="float32")
+        self.previous_e = np.zeros(2,dtype="float32")
+
         # The controller frequency will always depend on this, and so the observer if it runs in the callback
         self.timer_observer = self.create_timer(
             self.fixed_dt, 
@@ -121,7 +120,6 @@ class TruckStateObserver(Node):
         )
 
         self.counter = 0
-        self.t0 = self.get_clock().now()
         self.early = None
 
         self.time_data = []
@@ -141,37 +139,33 @@ class TruckStateObserver(Node):
 
 
     def ModelSimulator(self):
-        
-        # now = self.get_clock().now()
-        # if self.early is None:
-        #     self.early = now
-        #     return
-        # dt = (now - self.early).nanoseconds * 1e-9
-        # self.early = now
+ 
         dt = self.fixed_dt
 
         if(not self.UseGazeboSim):
             u = self.PdController(dt = dt)
             Fx, Mz = u
-            self.state += self.truck.dynamics(self.state, Fx, Mz, add_disturb = True)*dt
+            #self.state += self.truck.dynamics(self.state, Fx, Mz, add_disturb = True)*dt
+            self.state = self.rk4_step(self.state, Fx, Mz, dt, dist = True)
         else:
             self.state = self.cb.gazebo_state
+            # For the observer, to use the Urdf parameter for L and delta and not the one defined in simulink
+            self.truck.getFurtherParameterFromUrdf(self.L, self.delta)
 
         self.estimate_error_x1 = self.state[:4] - self.observed_state[:4]
 
-        #self.state = self.rk4_step(self.state, Fx, Mz, dt, dist = True)
 
         dot_observed_state = self.truck.dynamics(self.observed_state, Fx, Mz, add_disturb = False)
 
         self.HighOrderObserver(dot_observed_state, dt)
- 
+
 
 
     def HighOrderObserver(self, dot_observed_state, dt):
 
-        p = 0.01
-        alpha = 2*np.abs(dot_observed_state[:4]) + 550.0
-        lambdaa = np.sqrt(2/(alpha - 2*np.abs(dot_observed_state[:4])))* ( (alpha + 2*np.abs(dot_observed_state[:4]))*(1+p))/(1-p) + 1
+        p = 0.05
+        alpha = 2*np.abs(dot_observed_state[:4]) + 150.0
+        lambdaa = np.sqrt(2/(alpha - 2*np.abs(dot_observed_state[:4])))* ( (alpha + 2*np.abs(dot_observed_state[:4]))*(1+p))/(1-p) + 10
         delta = np.sqrt(np.abs(self.estimate_error_x1))
         correction_term = lambdaa*delta*np.tanh(self.scale_tanh*self.estimate_error_x1)
 
@@ -193,7 +187,6 @@ class TruckStateObserver(Node):
         st = self.state
         obs = self.observed_state
         self.counter+=1
-        print(self.counter)
         if self.counter % 100 == 0:
             self.get_logger().info(
                 f"real (estimated)\n"
@@ -221,29 +214,75 @@ class TruckStateObserver(Node):
                 [roll, pitch, yaw]
             ).as_matrix().T
 
-        Kp = [1000, 100]
-        KI = [10, 1.0]
-        vx_des, _, des_omega_z = self.rotation_body2world @ np.array([self.des_vel_x, 0, self.des_omega_z])
+        Kp = np.array([100000, 2000000])
+        Ki = np.array([100, 100.0])
+        Kd = np.array([100, 10])
+
+        vx_des, _, des_omega_z =  np.array([self.des_vel_x, 0, self.des_omega_z])
         
-        e_x = vx_des - self.state[s.VX]
-        e_wz = des_omega_z - self.state[s.WZ]
+        control_error = np.array([
+            vx_des - self.state[s.VX],
+            des_omega_z - self.state[s.WZ]
+        ])
 
-        derivative_term_fx = 100*((e_x - self.previous_e[0])/dt)
-        derivative_term_mz = 10*((e_wz - self.previous_e[2])/dt)
+        derivative_term = Kd*((control_error - self.previous_e)/dt)
+        integral_term = Ki*self.e_int
 
-        integral_term_fx = KI[0]*self.ex_int
-        integral_term_fx = KI[0]*self.e_wz_int
-
-        Fx = Kp[0]*e_x + derivative_term_fx  
-        Mz = Kp[1]*e_wz + derivative_term_mz
- 
-        self.previous_e[:] = [e_x, 0, e_wz]
-
-        self.ex_int += e_x*dt
-        self.e_wz_int += e_wz*dt
-        
-        return [Fx, Mz]
+        u = Kp*control_error + integral_term  
     
+        self.previous_e = control_error
+        self.e_int += control_error*dt
+
+        return u
+    
+
+    # def PdController(self, dt):
+    #     # 1. Coordinate transformation (if required elsewhere, kept for compatibility)
+    #     if not self.UseGazeboSim:
+    #         roll = self.state[s.ROLL]
+    #         pitch = 0.0
+    #         yaw = self.state[s.YAW]
+
+    #         self.rotation_body2world = R.from_euler(
+    #             'xyz',
+    #             [roll, pitch, yaw]
+    #         ).as_matrix().T
+
+    #     # 2. Controller Gains
+    #     Kp = np.array([100000.0, 1000.0])
+    #     Ki = np.array([100.0, 1.0])
+    #     Kd = np.array([100.0, 10.0])
+
+    #     # 3. Target States
+    #     vx_des = self.des_vel_x
+    #     des_omega_z = self.des_omega_z
+        
+    #     # 4. Compute Tracking Error
+    #     control_error = np.array([
+    #         vx_des - self.state[s.VX],
+    #         des_omega_z - self.state[s.WZ]
+    #     ])
+
+    #     # 5. Update Integral Term with Windup Protection (Clamping)
+    #     self.e_int += control_error * dt
+        
+    #     # Simple anti-windup: limit max integral error contribution
+    #     # Adjust the max limits [vx_int_max, wz_int_max] based on your vehicle
+    #     max_int_limit = np.array([500.0, 50.0]) 
+    #     self.e_int = np.clip(self.e_int, -max_int_limit, max_int_limit)
+
+    #     # 6. Compute PID Terms
+    #     proportional_term = Kp * control_error
+    #     integral_term = Ki * self.e_int
+    #     derivative_term = Kd * ((control_error - self.previous_e) / dt)
+
+    #     # 7. Total Control Output (Fixed: added derivative_term)
+    #     u = proportional_term + integral_term + derivative_term
+        
+    #     # 8. Save current error for the next time step
+    #     self.previous_e = control_error
+
+    #     return u
 
     def rk4_step(self, state, Fx, Mz, dt, dist):
 
@@ -278,30 +317,27 @@ class TruckStateObserver(Node):
             filename="angular_vel_z.png"
         )
 
-    # World frame doesn't exist    
-    # def World2Robot(self):
+ 
+    def steering_callback(self, msg: Float64MultiArray):
+        # Example: first steering command
+        if len(msg.data) > 0:
+            self.delta = msg.data
 
-    #     tf_buffer = tf2_ros.Buffer()
-    #     # Subscribe to /tf and populate the tf_buffer
-    #     listener = tf2_ros.TransformListener(tf_buffer, self)
-        
-    #     trans = tf_buffer.lookup_transform(
-    #         "base_link",   # target frame (robot)
-    #         "world",       # source frame
-    #         rclpy.time.Time()
-    #     )
-        
-    #     t = trans.transform.translation
-    #     q = trans.transform.rotation
+    def get_L_parameters(self, future):
+        try:
+            result = future.result()
 
-    #     # Rotation matrix from quaternion
-    #     rotation = quaternion_matrix(
-    #         [q.x, q.y, q.z, q.w]
-    #     )
+            self.L = [
+                result.values[0].double_value,
+                result.values[1].double_value,
+                result.values[2].double_value,
+                result.values[3].double_value,
+            ]
 
-    #     return rotation*np.array([self.des_vel_x, 0.0, self.des_omega_z])
-
-
+        except Exception as e:
+            self.get_logger().error(
+                f"Failed to get L parameters: {e}"
+            )
 def main(args=None):
 
     rclpy.init(args=args)
@@ -311,16 +347,20 @@ def main(args=None):
         if node.UseGazeboSim:
             executor = rclpy.executors.MultiThreadedExecutor()
             executor.add_node(node)
-
-            try:
-                executor.spin()
-            finally:
-                executor.shutdown()
-
+            executor.spin()  # Handled by the outer try-except now
         else:
-            rclpy.spin(node)
+            rclpy.spin(node) # Handled by the outer try-except now
 
+    except KeyboardInterrupt:
+        # This catches Ctrl+C cleanly for BOTH Gazebo and non-Gazebo modes!
+        node.get_logger().info('Shutting down observer node cleanly...')
+        
     finally:
+        # Clean up the executor if it was initialized
+        if node.UseGazeboSim and 'executor' in locals():
+            executor.shutdown()
+            
+        # Run your custom end routine and destroy the node
         node.AtEnd()
         node.destroy_node()
 

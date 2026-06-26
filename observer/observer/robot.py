@@ -20,6 +20,8 @@ class robot:
         # Robot configuration
         dq = pinocchio.utils.zero(self.model.nv)  # joint velocities
         self.mass, self.Ix, self.Iz = self.get_mass_properties()
+        self.L = 0
+        self.delta = 0
     
     def get_mass_properties(self):
         """
@@ -28,7 +30,7 @@ class robot:
 
         total_mass = 0.0
 
-        for inertia in self.model.inertias[1:]:
+        for inertia in self.model.inertias[:]:
             total_mass += inertia.mass
 
         q0 = pinocchio.neutral(self.model)
@@ -90,47 +92,74 @@ class robot:
 
         return total_mass, Ix, Iz
 
+
+    def getFurtherParameterFromUrdf(self, L, delta):
+         self.L = L
+         self.delta = delta
+
+
     def dynamics(self, state, Fx, Mz, add_disturb):
-            """
-            state =
-            [x,y,roll,yaw,vx,vy,p,r]
-            """
+        """
+        state = [x, y, roll, yaw, vx, vy, p, r]
+        """
+        x, y, phi, psi, vx, vy, p, r = state
+        m = self.mass
+        Ix = self.Ix
+        Iz = self.Iz
+        C_alpha = 300e2  # Note: 300 N/rad is incredibly low for a real vehicle (usually ~40000+)
+        Cr = 200000.0
+        Kr = 800000
+        g = -9.81
+        h = 1
+        # Disturbance configuration
+        dist = 0.0
+        if add_disturb:
+            dist = np.sin(4.0 * np.pi / 180.0 * (2.0 * np.pi / 5)**2)
 
-            x, y, phi, psi, vx, vy, p, r = state
-            epsilon = 0.0
-            h = 1.0
-            Cr = 200000.0
-            Kr = 800000
-            g = -9.81
-            m = self.mass
-            Ix = self.Ix
-            Iz = self.Iz
-            dist = 0.0
+        # Kinematics
+        # dx = vx * np.cos(psi) - vy * np.sin(psi) 
+        # dy = vx * np.sin(psi) + vy * np.cos(psi)
+        dx = vx
+        dy = vy
 
-            if(add_disturb):
-                 dist = np.sin(4.0*np.pi/180.0*(2.0*np.pi/5)**2)
+        dphi = p
+        dpsi = r
 
-            dx = vx*np.cos(psi) - vy*np.sin(psi) 
-            dy = vx*np.sin(psi) + vy*np.cos(psi)
-            
-            dphi = p
-            dpsi = r
-           
-            dvx = Fx/m + r*vy  + dist
-            #dvy = Fy/m - r*vx
-            dvy = -r*vx + dist
+        # Prevent division by zero safely
+        vx_lim = np.where(np.abs(vx) < 0.1, np.where(vx >= 0, 0.1, -0.1), vx)
 
-            dp = (m*dvy*h + m*g*np.sin(phi + epsilon) -Cr*dphi - Kr*phi )/Ix
-            dr = (Mz)/Iz
+        # Steering Geometry (L = [Lf1, Lf2, Lr1, Lr2])
+        L = np.array([3.65, 1.75, 2.0, 3.39])
+        
+        delta_1 = (np.sum(L)) / 2 * (r / vx_lim)
+        delta_2 = (2*L[1] + L[2] + L[3]) / (2*L[0] + L[2] + L[3]) * delta_1
+        delta = np.array([delta_1, delta_2])
 
-            return np.array([
-                dx,
-                dy,
-                dphi,
-                dpsi,
-                dvx,
-                dvy,
-                dp,
-                dr
-            ])
+        # Calculate Slip Angles (alpha) and Forces (F) vectorially
+        # Front tires (0, 1) have steering angles; Rear tires (2, 3) do not
+        alpha = np.zeros(4, dtype='float32')
+        alpha[0] = delta[0] - (vy + L[0] * r) / vx_lim
+        alpha[1] = delta[1] - (vy + L[1] * r) / vx_lim
+        alpha[2] = - (vy - L[2] * r) / vx_lim
+        alpha[3] = - (vy - L[3] * r) / vx_lim
 
+        # Without these forces the longitudinal velocity vx decrease
+        F = C_alpha * alpha
+
+        # Front forces projected onto the lateral axis
+        F_lateral_total = F[0] * np.cos(delta[0]) + F[1] * np.cos(delta[1]) + F[2] + F[3]
+        
+        # Yaw moment from tire lateral forces
+        # Moment = F_y * distance (Front adds positive yaw moment, rear resists it)
+        tire_yaw_moment = (F[0] * np.cos(delta[0]) * L[0] + 
+                        F[1] * np.cos(delta[1]) * L[1] - 
+                        F[2] * L[2] - 
+                        F[3] * L[3])
+
+        # Accelerations
+        dvx = Fx / m + vy * r 
+        dvy = -vx * r + (F_lateral_total) / m
+        dp = (m * dvy * h + m * g *np.sin(phi) -Cr * dphi - Kr * phi ) / Ix
+        dr = (Mz + tire_yaw_moment) / Iz  # Restoring tire moment naturally opposes Mz if signs match physics
+
+        return np.array([dx, dy, dphi, dpsi, dvx, dvy, dp, dr])
