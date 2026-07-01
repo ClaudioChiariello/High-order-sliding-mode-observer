@@ -7,11 +7,12 @@ package_name = 'observer'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=find_packages(exclude=['test']),
+    packages=find_packages(exclude=['test']), #Automatically install nested packages that are in observer. You can install them with import package_name.folders or 
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name, ['package.xml']), 
+        ('share/' + package_name, glob('**/*.so', recursive=True)), #look the .so in every subfolder
 
         # Install launch files
         (os.path.join('share', package_name, 'launch'),
@@ -23,6 +24,10 @@ setup(
 
         (os.path.join('share', package_name, 'models'),
          glob('models/*')),
+
+        (os.path.join('share', package_name, 'matlab'),
+         glob('matlab/*')),
+
     ],
     install_requires=['setuptools'],
     zip_safe=True,

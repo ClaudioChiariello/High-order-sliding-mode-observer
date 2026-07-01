@@ -16,13 +16,14 @@ node lifecycle
 It just needs access to the node's state. So Inheritance would be a good solution since the class Callbacks would become a node"""
  
  
-class Callbacks:
+class GazeboCallback:
 
     def __init__(self, node):
         self.node = node
         self.imu_received = False
         self.odom_received = False
-        self.gazebo_state = np.zeros(8, dtype='float32')
+        self.gazebo_full_state = np.zeros(8, dtype='float32')
+        self.gazebo_reduced_state = np.zeros(5, dtype='float32')
         self.roll = np.float32(0.0)
         self.yaw = np.float32(0.0)
         self.x = np.float32(0.0)
@@ -33,6 +34,8 @@ class Callbacks:
         self.dot_roll = np.float32(0.0)
         self.dot_yaw = np.float32(0.0)
         self.wz = 0.0
+
+        self.phi_u = np.float32(0.0)
     
     #Called every 20ms (50Hz) 
     def imu_callback(self, msg):
@@ -89,7 +92,7 @@ class Callbacks:
     def update_error(self):
 
             
-        self.gazebo_state = np.array([
+        self.gazebo_full_state = np.array([
             self.x,
             self.y,
             self.roll,
@@ -100,6 +103,14 @@ class Callbacks:
             self.dot_yaw
         ], dtype=np.float32)
 
+        self.gazebo_reduced_state = np.array([
+            self.roll,
+            self.dot_roll,
+            self.vy,
+            self.dot_yaw,
+            self.vx,
+            self.phi_u
+        ], dtype=np.float32)
         #print(f'self.node.state[4:] {self.node.observed_state_x1}')
         # self.odom_received = False
         # self.imu_received = False

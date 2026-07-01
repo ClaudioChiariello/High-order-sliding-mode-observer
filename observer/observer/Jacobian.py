@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-import sys
-import argparse
-
-# 1. Parse command line arguments before ROS starts
-parser = argparse.ArgumentParser(description="Truck State Observer Node")
-parser.add_argument('--num-states', type=int, default=6, choices=[6, 8],
-                    help='Number of system states to observe (6 or 8)')
-# Extract our custom args while leaving ROS internal arguments intact
-parsed_args, ros_args = parser.parse_known_args()
-num_states = parsed_args.num_states
 
 import rclpy
 from rclpy.node import Node
@@ -23,11 +13,7 @@ from tf_transformations import quaternion_matrix
 from .gazebo_model import GazeboCallback
 from . import robot
 from observer.utils.data_plotter import DataPlotter
-
-if num_states==6:
-    from observer.states import obs_state as s
-else:
-    from observer.states import state as s
+from .states import state as s
 
 from geometry_msgs.msg import Twist
 
@@ -46,8 +32,6 @@ class TruckStateObserver(Node):
         super().__init__('truck_state_observer')
 
         self.group = ReentrantCallbackGroup()
-        self.declare_parameter('num_states', num_states)
-        self.num_states = self.get_parameter('num_states').value
 
         self.declare_parameter('scale_tanh', 10.0)
         self.scale_tanh = self.get_parameter('scale_tanh').value
@@ -62,6 +46,7 @@ class TruckStateObserver(Node):
         self.truck = robot.robot()
         self.Gazebo = GazeboCallback(self)
         self.plotter = DataPlotter("results")
+        self.L = np.zeros(4, dtype='float32')
 
         self.UseGazeboSim = False
         if self.get_parameter("use_sim_time").value:
@@ -89,7 +74,6 @@ class TruckStateObserver(Node):
                 callback_group=self.group
             )
 
-            self.L = np.zeros(4)
             self.param_client = self.create_client(
                 GetParameters,
                 '/truck_kinematic_control/get_parameters'
@@ -119,14 +103,9 @@ class TruckStateObserver(Node):
         self.delta = np.zeros(2, dtype='float32')
         self.rotation_body2world = np.zeros((3,3), dtype='float32')
         
-        
-        self.state = np.zeros(num_states, dtype=np.float64)
-        self.jacobian = np.zeros((6,6), dtype='float32')
-        self.output = np.zeros(6, dtype="float32")
-
+        num_states = 8
+        self.state = np.zeros(num_states, dtype="float32")
         self.observed_state = np.zeros(num_states, dtype="float32")
-        self.observed_output = np.zeros(6, dtype="float32")
-
         self.estimate_error_x1 = np.zeros(4, dtype="float32")
 
         self.e_int = np.zeros(2,dtype="float32")
@@ -146,7 +125,7 @@ class TruckStateObserver(Node):
         self.state_data = []
         self.observed_data = []
         self.sim_time = 0.0
-        self.w = np.zeros(6, dtype=np.float64)
+
 
     def GazeboControl(self):
         msg = Twist()
@@ -163,45 +142,22 @@ class TruckStateObserver(Node):
         dt = self.fixed_dt
         u = self.PdController(dt = dt)
         Fx, Mz = u
-
-        dot_observed_state = None
-
         if(not self.UseGazeboSim):
-
-            if(num_states == 8):
-
-                #self.state += self.truck.dynamics(self.state, Fx, Mz, add_disturb = True)*dt
-                self.state = self.rk4_step(self.state, Fx, Mz, dt, dist = True)
-
-                dot_observed_state = self.truck.dynamics(self.observed_state, Fx, Mz, add_disturb = False)
-                
-                self.estimate_error_x1 = self.state[:4] - self.observed_state[:4]
-
-                self.HighOrderObserver(dot_observed_state, dt)
-
-            else:
-                dot_x, J_x, h_meas, J_h = self.truck.calculate_dynamics(self.state, Fx, Mz)
-                
-                self.state += dot_x*dt
-                self.output = h_meas
-
-                dot_observed_state, _, h_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz)
-                
-                self.jacobian = J_h
-                self.observed_output = h_meas
-                J_inv = np.linalg.inv(self.jacobian)
-                print(J_inv)
-                self.JacobianObserver(dot_observed_state, dt)
+            #self.state += self.truck.dynamics(self.state, Fx, Mz, add_disturb = True)*dt
+            self.state = self.rk4_step(self.state, Fx, Mz, dt, dist = True)
         else:
-            
             self.state = self.Gazebo.gazebo_state
-            
             # For the observer, to use the Urdf parameter for L and delta and not the one defined in simulink
-            
             self.truck.getFurtherParameterFromUrdf(self.L, self.delta)
 
+        self.estimate_error_x1 = self.state[:4] - self.observed_state[:4]
 
-    def HighOrderObserver(self, dot_observed_state, dt):
+        dot_observed_state = self.truck.dynamics(self.observed_state, Fx, Mz, add_disturb = False)
+
+        self.JacobianObserver(dot_observed_state, dt)
+
+
+    def JacobianObserver(self, dot_observed_state, dt):
 
         p = 0.05
         alpha = 2*np.abs(dot_observed_state[:4]) + 150.0
@@ -240,55 +196,19 @@ class TruckStateObserver(Node):
                 f"wz={st[s.WZ]:7.3f} ({obs[s.WZ]:7.3f})\n"
                 f"dt={dt:.4f}"
             )
-    
-    def JacobianObserver(self, dot_observed_state, dt):
-
-        J_inv = np.linalg.inv(self.jacobian)
-
-        alpha = 100
-
-        beta = 10
-
-        print(self.observed_output.shape)
-        print(self.output.shape)
-        estimated_error = self.observed_output - self.output
-
-        root_abs_error = np.sqrt(np.abs(estimated_error))
-
-        sign_error = np.tanh(self.scale_tanh*estimated_error)
-
-        self.w += beta*sign_error
-
-        correction_term = alpha*root_abs_error*sign_error + self.w
-
-        self.observed_state = dot_observed_state + J_inv*correction_term
-
-        st = self.state
-        obs = self.observed_state
-        self.counter+=1
-        if self.counter % 100 == 0:
-            self.get_logger().info(
-            f"real (estimated)\n"
-            f"Ang : r={st[s.ROLL]:7.3f} ({obs[s.ROLL]:7.3f})\n "
-            f"Vel : vx={st[s.VX]:7.3f} ({obs[s.VX]:7.3f}) "
-            f"vy={st[s.VY]:7.3f} ({obs[s.VY]:7.3f})\n"
-            f"Rate: wx={st[s.WX]:7.3f} ({obs[s.WX]:7.3f})  "
-            f"wz={st[s.WZ]:7.3f} ({obs[s.WZ]:7.3f})\n"
-            f"dt={dt:.4f}"
-        )
 
 
     def PdController(self, dt):
 
-        # if(not self.UseGazeboSim):
-        #     roll = self.state[s.ROLL]
-        #     pitch = 0.0
-        #     yaw = self.state[s.YAW]
+        if(not self.UseGazeboSim):
+            roll = self.state[s.ROLL]
+            pitch = 0.0
+            yaw = self.state[s.YAW]
 
-        #     self.rotation_body2world = R.from_euler(
-        #         'xyz',
-        #         [roll, pitch, yaw]
-        #     ).as_matrix().T
+            self.rotation_body2world = R.from_euler(
+                'xyz',
+                [roll, pitch, yaw]
+            ).as_matrix().T
 
         Kp = np.array([100000, 2000000])
         Ki = np.array([100, 100.0])
@@ -437,7 +357,7 @@ def main(args=None):
             executor.shutdown()
             
         # Run your custom end routine and destroy the node
-        #node.AtEnd()
+        node.AtEnd()
         node.destroy_node()
 
         if rclpy.ok():
