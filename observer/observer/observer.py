@@ -25,9 +25,9 @@ from . import robot
 from observer.utils.data_plotter import DataPlotter
 
 if num_states==6:
-    from observer.states import obs_state as s
+    from observer.utils.states import obs_state as s
 else:
-    from observer.states import state as s
+    from observer.utils.states import state as s
 
 from geometry_msgs.msg import Twist
 
@@ -46,8 +46,6 @@ class TruckStateObserver(Node):
         super().__init__('truck_state_observer')
 
         self.group = ReentrantCallbackGroup()
-        self.declare_parameter('num_states', num_states)
-        self.num_states = self.get_parameter('num_states').value
 
         self.declare_parameter('scale_tanh', 10.0)
         self.scale_tanh = self.get_parameter('scale_tanh').value
@@ -58,9 +56,11 @@ class TruckStateObserver(Node):
         self.declare_parameter("des_omega_z", 0.5) #giving a desired angular vel prevent the velocity to reach a steady state
         self.des_omega_z = self.get_parameter('des_omega_z').value
         
-        # Friend Function
+        # Friend Function 
         self.truck = robot.robot()
+        
         self.Gazebo = GazeboCallback(self)
+        
         self.plotter = DataPlotter("results")
 
         self.UseGazeboSim = False
@@ -119,17 +119,20 @@ class TruckStateObserver(Node):
         self.delta = np.zeros(2, dtype='float32')
         self.rotation_body2world = np.zeros((3,3), dtype='float32')
         
-        
+        # State terms
         self.state = np.zeros(num_states, dtype=np.float64)
-        self.jacobian = np.zeros((6,6), dtype='float32')
         self.output = np.zeros(6, dtype="float32")
 
+        # Observer terms
         self.observed_state = np.zeros(num_states, dtype="float32")
+        
         self.observed_output = np.zeros(6, dtype="float32")
+        
+        self.jacobian = np.zeros((6,6), dtype='float32')
 
-        self.estimate_error_x1 = np.zeros(4, dtype="float32")
-
+        # PID Terms
         self.e_int = np.zeros(2,dtype="float32")
+        
         self.previous_e = np.zeros(2,dtype="float32")
 
         # The controller frequency will always depend on this, and so the observer if it runs in the callback
@@ -166,64 +169,68 @@ class TruckStateObserver(Node):
 
         dot_observed_state = None
 
-        if(not self.UseGazeboSim):
 
-            if(num_states == 8):
-
+        if(num_states == 8):
+            if(not self.UseGazeboSim):
                 #self.state += self.truck.dynamics(self.state, Fx, Mz, add_disturb = True)*dt
                 self.state = self.rk4_step(self.state, Fx, Mz, dt, dist = True)
-
-                dot_observed_state = self.truck.dynamics(self.observed_state, Fx, Mz, add_disturb = False)
-                
-                self.estimate_error_x1 = self.state[:4] - self.observed_state[:4]
-
-                self.HighOrderObserver(dot_observed_state, dt)
-
             else:
-                dot_x, J_x, h_meas, J_h = self.truck.calculate_dynamics(self.state, Fx, Mz)
+                self.state = self.Gazebo.gazebo_full_state
+
+            dot_observed_state = self.truck.dynamics(self.observed_state, Fx, Mz, add_disturb = False)
+            
+            self.HighOrderObserver(dot_observed_state, dt)
+
+        else:
+            if(not self.UseGazeboSim):
+
+                dot_x, J_x, h_meas, _ = self.truck.calculate_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
                 
                 self.state += dot_x*dt
+
                 self.output = h_meas
 
-                dot_observed_state, _, h_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz)
-                
-                self.jacobian = J_h
-                self.observed_output = h_meas
-                J_inv = np.linalg.inv(self.jacobian)
-                print(J_inv)
-                self.JacobianObserver(dot_observed_state, dt)
-        else:
+            else:
+
+                self.output = self.Gazebo.gazebo_output
             
-            self.state = self.Gazebo.gazebo_state
-            
+                self.truck.getFurtherParameterFromUrdf(self.L, self.delta)
+
+            dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz, False, dt+self.sim_time)
+
+            self.jacobian = J_h
+
+            self.observed_output = h_hat_meas
+
+            self.JacobianObserver(dot_observed_state, dt)   
             # For the observer, to use the Urdf parameter for L and delta and not the one defined in simulink
             
-            self.truck.getFurtherParameterFromUrdf(self.L, self.delta)
+        self.sim_time += dt
+        self.time_data.append(self.sim_time)
+        self.state_data.append(self.state.copy())
+        self.observed_data.append(self.observed_state.copy())
+
 
 
     def HighOrderObserver(self, dot_observed_state, dt):
 
         p = 0.05
+        
+        estimated_error = self.state[:4] - self.observed_state[:4]
+
         alpha = 2*np.abs(dot_observed_state[:4]) + 150.0
+        
         lambdaa = np.sqrt(2/(alpha - 2*np.abs(dot_observed_state[:4])))* ( (alpha + 2*np.abs(dot_observed_state[:4]))*(1+p))/(1-p) + 10
-        delta = np.sqrt(np.abs(self.estimate_error_x1))
-        correction_term = lambdaa*delta*np.tanh(self.scale_tanh*self.estimate_error_x1)
+        
+        root_abs_error = np.sqrt(np.abs(estimated_error))
+        
+        correction_term = lambdaa*root_abs_error*np.tanh(self.scale_tanh*estimated_error)
 
         dot_observed_state[:4] = dot_observed_state[:4] + correction_term
-        dot_observed_state[4:] = dot_observed_state[4:] + alpha*np.tanh(self.scale_tanh*self.estimate_error_x1)
+        dot_observed_state[4:] = dot_observed_state[4:] + alpha*np.tanh(self.scale_tanh*estimated_error)
         
         self.observed_state += dot_observed_state*dt
         
-        # Save variables for Plotting
-        self.sim_time += dt
-        self.time_data.append(self.sim_time)
-        self.state_data.append(
-            self.state.copy()
-        )
-        self.observed_data.append(
-            self.observed_state.copy()
-        )
-
         st = self.state
         obs = self.observed_state
         self.counter+=1
@@ -245,15 +252,17 @@ class TruckStateObserver(Node):
 
         J_inv = np.linalg.inv(self.jacobian)
 
-        alpha = 100
+        alpha = 5
 
-        beta = 10
+        beta = 0.01
 
-        print(self.observed_output.shape)
-        print(self.output.shape)
-        estimated_error = self.observed_output - self.output
+        estimated_error = self.output - self.observed_output
 
         root_abs_error = np.sqrt(np.abs(estimated_error))
+
+        # 2. Overwrite just the specific indices using vectorized assignment
+        root_abs_error[2] = np.abs(estimated_error[2]) ** (2/3)
+        root_abs_error[3] = np.abs(estimated_error[3]) ** (2/3)
 
         sign_error = np.tanh(self.scale_tanh*estimated_error)
 
@@ -261,8 +270,8 @@ class TruckStateObserver(Node):
 
         correction_term = alpha*root_abs_error*sign_error + self.w
 
-        self.observed_state = dot_observed_state + J_inv*correction_term
-
+        self.observed_state += (dot_observed_state + J_inv @ correction_term)*dt
+            
         st = self.state
         obs = self.observed_state
         self.counter+=1
@@ -312,54 +321,6 @@ class TruckStateObserver(Node):
         return u
     
 
-    # def PdController(self, dt):
-    #     # 1. Coordinate transformation (if required elsewhere, kept for compatibility)
-    #     if not self.UseGazeboSim:
-    #         roll = self.state[s.ROLL]
-    #         pitch = 0.0
-    #         yaw = self.state[s.YAW]
-
-    #         self.rotation_body2world = R.from_euler(
-    #             'xyz',
-    #             [roll, pitch, yaw]
-    #         ).as_matrix().T
-
-    #     # 2. Controller Gains
-    #     Kp = np.array([100000.0, 1000.0])
-    #     Ki = np.array([100.0, 1.0])
-    #     Kd = np.array([100.0, 10.0])
-
-    #     # 3. Target States
-    #     vx_des = self.des_vel_x
-    #     des_omega_z = self.des_omega_z
-        
-    #     # 4. Compute Tracking Error
-    #     control_error = np.array([
-    #         vx_des - self.state[s.VX],
-    #         des_omega_z - self.state[s.WZ]
-    #     ])
-
-    #     # 5. Update Integral Term with Windup Protection (Clamping)
-    #     self.e_int += control_error * dt
-        
-    #     # Simple anti-windup: limit max integral error contribution
-    #     # Adjust the max limits [vx_int_max, wz_int_max] based on your vehicle
-    #     max_int_limit = np.array([500.0, 50.0]) 
-    #     self.e_int = np.clip(self.e_int, -max_int_limit, max_int_limit)
-
-    #     # 6. Compute PID Terms
-    #     proportional_term = Kp * control_error
-    #     integral_term = Ki * self.e_int
-    #     derivative_term = Kd * ((control_error - self.previous_e) / dt)
-
-    #     # 7. Total Control Output (Fixed: added derivative_term)
-    #     u = proportional_term + integral_term + derivative_term
-        
-    #     # 8. Save current error for the next time step
-    #     self.previous_e = control_error
-
-    #     return u
-
     def rk4_step(self, state, Fx, Mz, dt, dist):
 
         k1 = self.truck.dynamics(state, Fx, Mz, dist)
@@ -372,26 +333,7 @@ class TruckStateObserver(Node):
 
 
     def AtEnd(self):
-
-        state = np.array(self.state_data)
-        observed = np.array(self.observed_data)
-        time = np.array(self.time_data)
-        
-        self.plotter.plot(
-            time,
-            state[:, s.VX],
-            observed[:, s.VX],
-            ylabel="vx [m/s]",
-            filename="velocities.png"
-        )
-
-        self.plotter.plot(
-            time,
-            state[:, s.WZ],
-            observed[:, s.WZ],
-            ylabel="wz [rad/s]",
-            filename="angular_vel_z.png"
-        )
+        self.plotter.PlotAtEnd(self.state_data, self.observed_data, self.time_data)
 
  
     def steering_callback(self, msg: Float64MultiArray):
@@ -414,6 +356,8 @@ class TruckStateObserver(Node):
             self.get_logger().error(
                 f"Failed to get L parameters: {e}"
             )
+
+
 def main(args=None):
 
     rclpy.init(args=args)
@@ -437,7 +381,7 @@ def main(args=None):
             executor.shutdown()
             
         # Run your custom end routine and destroy the node
-        #node.AtEnd()
+        node.AtEnd()
         node.destroy_node()
 
         if rclpy.ok():

@@ -3,7 +3,7 @@ import os
 from ament_index_python.packages import get_package_share_directory 
 import pinocchio
 import numpy as np
-from .states import state as s
+from .utils.states import state as s
 import ctypes
 
 class robot:
@@ -115,7 +115,7 @@ class robot:
 
 
 
-    def calculate_dynamics(self, state, Fx, Mz):
+    def calculate_dynamics(self, state, Fx, Mz, use_dist, dt):
             """Wrapper to safely feed numpy arrays straight into the raw C memory blocks."""
             # Ensure data arrays are contiguous float64 types for C compatibility
             in_obs = np.ascontiguousarray(state, dtype=np.float64)
@@ -125,7 +125,7 @@ class robot:
             J_x   = np.zeros(36, dtype=np.float64)
             h     = np.zeros(6, dtype=np.float64)
             J_h   = np.zeros(36, dtype=np.float64)
-            
+
             # Invoke the native C function execution loop
             self.lib.vehicle_dynamics_numeric(
                 in_obs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
@@ -137,6 +137,10 @@ class robot:
                 J_h.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
             )
 
+            if(use_dist):
+                 #dot_x += np.sin(2*np.pi*0.5*dt)
+                 dot_x[-1] = 0.8*np.sin(2*np.pi*0.05*dt)
+            
             # Reshape flat 1D output buffers back into proper 2D matrices
             return dot_x, J_x.reshape((6, 6), order='F'), h, J_h.reshape((6, 6), order='F') 
 

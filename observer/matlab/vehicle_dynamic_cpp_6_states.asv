@@ -1,0 +1,140 @@
+clear; clc;
+
+compile_with_dist = false;
+
+
+
+% 1. Initialize variables explicitly (Only what the observer tracks!)
+phi   = sym('phi', 'real');
+wx    = sym('wx', 'real');
+vy    = sym('vy', 'real');
+wz    = sym('wz', 'real');
+vx    = sym('vx', 'real');
+phi_u = sym('phi_u', 'real'); % Estimated input bias/road bank offset 
+
+Fx    = sym('Fx', 'real');
+Mz    = sym('Mz', 'real');
+
+
+% Pure 6-state Observer Vector
+state_obs = [phi; wx; vy; wz; vx; phi_u]; 
+% Physical Parameters
+m = 12809.162180730276; Ix = 4423.849628639999; Iz = 35308.58917090647; C_alpha = 300e2;
+%syms m Ix Iz C_alpha real
+Cr = 200000.0; Kr = 800000; g = -9.81; h_com = 1;
+
+
+% Tire slip angles & total lateral force calculations
+L = [3.65, 1.75, 2.0, 3.39];
+sum_L = sum(L);
+vx_lim = piecewise(abs(vx) < 0.1, piecewise(vx >= 0, 0.1, -0.1), vx);
+
+% 2. Kinematics / Dynamics calculations using the safe vx_lim
+delta_1 = (sum_L / 2) * (wz / vx_lim);
+delta_2 = (2*L(2) + L(3) + L(4)) / (2*L(1) + L(3) + L(4)) * delta_1;
+
+alpha = sym(zeros(4, 1));
+alpha(1) = delta_1 - (vy + L(1) * wz) / vx_lim;
+alpha(2) = delta_2 - (vy + L(2) * wz) / vx_lim;
+alpha(3) = - (vy - L(3) * wz) / vx_lim;
+alpha(4) = - (vy - L(4) * wz) / vx_lim;
+
+F = C_alpha * alpha;
+F_lateral_total = F(1) * cos(delta_1) + F(2) * cos(delta_2) + F(3) + F(4);
+tire_yaw_moment = (F(1) * cos(delta_1) * L(1) + F(2) * cos(delta_2) * L(2) - F(3) * L(3) - F(4) * L(4));
+
+% phi total angle -> incorpora il disturbo stradale
+% (phi- phi_u) -> orientamento delle sospensioni
+
+dist = (use_dist == 1) * 5;
+
+% Accelerations
+dvx = Fx / m + vy * wz ;
+dvy = -vx * wz + (F_lateral_total) / m;
+dot_wx = (m * dvy * h_com + m * g * sin(phi) - Cr * wx - Kr * (phi - phi_u)) / Ix + dist;
+dot_wz = (Mz + tire_yaw_moment) / Iz;
+dphi = wx;
+dphi_u = (use_dist == 1) * sin(2*pi*70);
+
+% Remapped State Derivative Vector (6x1 matching state_obs layout)
+dot_x = [dphi; dot_wx; dvy; dot_wz; dvx; dphi_u];
+
+% 3. Modeling Output / Measurement Matrix h(x)
+distance_from_CoM = [0.5; 0.5; 0.5];
+dot_omega = [dot_wx; 0; dot_wz];
+omega = [wx; 0; wz];
+transport_term = cross(dot_omega, distance_from_CoM) + cross(omega, cross(omega, distance_from_CoM));
+acc_y_measured = dvy - transport_term(2); 
+
+h = [phi; acc_y_measured; wx; dot_wx; wz; vx];
+
+% 4. Calculate Analytical Jacobians with respect to ONLY state_obs
+J_x = jacobian(dot_x, state_obs);
+J_h = jacobian(h, state_obs);
+ 
+
+% ==========================================
+% 4. NUMERIC FUNCTION EXPORT
+% ==========================================
+just_six_states = 1;
+
+if(compile_with_dist)
+    vars_input = {state_obs, Fx, Mz, use_dist};
+else
+    % Assuming you have an 8-state vector and an extra input vector for the alternate plant
+    vars_input = {state_obs, Fx, Mz}; 
+end
+
+matlabFunction(dot_x, J_x, h, J_h, 'File', 'vehicle_dynamics_numeric', ...
+    'Vars', vars_input, ...  %these are the inputs which will substitute the symbolic terms, and becomes input terms
+    'Outputs', {'dot_x_num', 'J_x_num', 'h_num', 'J_h_num'});
+fprintf('Generated localized 6-DOF vehicle_dynamics_numeric.m successfully!\n');
+
+% ==========================================
+% AUTOMATED CODEGEN & COMPILATION PIPELINE
+% ==========================================
+fprintf('Running MATLAB Code Generation (codegen)...\n');
+cfg = coder.config('lib');
+cfg.SupportNonFinite = false; % Disables extra MATLAB dependencies if not needed
+cfg.GenerateExampleMain = 'DoNotGenerate';
+
+% Explicitly tell Coder to create standalone types
+cfg.TargetLangStandard = 'C99 (ISO)';       % Fixed with exact match!
+cfg.TargetLang = 'C';
+
+% Run codegen with the config object Without -args, codegen will throw an error and refuse to build. It has no way of guessing whether your plant state vector has 8 elements, 80 elements, or 8,000 elements.
+if(just_six_states)
+    codegen vehicle_dynamics_numeric -args {zeros(6, 1), 0.0, 0.0, logical(0),} -config cfg -report
+else
+    codegen vehicle_dynamics_numeric -args {zeros(8, 1), zeros(6, 1), 0.0, 0.0} -config cfg -report
+end
+
+% ==========================================
+% AUTOMATED COMPILATION OF THE LIBRARY
+% ==========================================
+target_dir = 'codegen/lib/vehicle_dynamics_numeric';
+
+% 1. Comment out tmwtypes.h (same as before)
+comment_cmd = sprintf('cd %s && sed -i ''s/#include "tmwtypes.h"/\\/\\* #include "tmwtypes.h" \\*\\//g'' rtwtypes.h', target_dir);
+
+% 2. Inject the missing boolean_T definition directly into rtwtypes.h right below the comment
+typedef_cmd = sprintf('cd %s && sed -i ''/tmwtypes.h/a typedef unsigned char boolean_T;'' rtwtypes.h', target_dir);
+
+% 3. Compile command
+gcc_cmd = sprintf('cd %s && gcc -O3 -fPIC -shared -I. vehicle_dynamics_numeric.c -o libvehicle_dynamics.so -lm', target_dir);
+
+% Execute them sequentially
+fprintf('Modifying types and applying boolean_T patch...\n');
+system(comment_cmd);
+system(typedef_cmd);
+
+fprintf('Compiling .so binary...\n');
+[status, cmdout] = system(gcc_cmd);
+
+if status == 0
+    fprintf('Successfully compiled libvehicle_dynamics.so inside %s!\n', target_dir);
+else
+    error('Compilation failed. Compiler output:\n%s', cmdout);
+end
+
+ 

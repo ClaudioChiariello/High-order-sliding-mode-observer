@@ -23,7 +23,8 @@ class GazeboCallback:
         self.imu_received = False
         self.odom_received = False
         self.gazebo_full_state = np.zeros(8, dtype='float32')
-        self.gazebo_reduced_state = np.zeros(5, dtype='float32')
+        self.gazebo_output = np.zeros(6, dtype='float32')
+        
         self.roll = np.float32(0.0)
         self.yaw = np.float32(0.0)
         self.x = np.float32(0.0)
@@ -33,6 +34,7 @@ class GazeboCallback:
 
         self.dot_roll = np.float32(0.0)
         self.dot_yaw = np.float32(0.0)
+        self.wx = np.float32(0.0)
         self.wz = 0.0
 
         self.phi_u = np.float32(0.0)
@@ -54,12 +56,12 @@ class GazeboCallback:
         self.roll, self.pitch, self.yaw = euler_from_quaternion(q)
 
         # Angular velocity
-        wx = msg.angular_velocity.x
+        self.wx = msg.angular_velocity.x
         wy = msg.angular_velocity.y
         self.wz = msg.angular_velocity.z
 
         rpy_dot = self.angular_velocity_to_rpy_rates(
-            [wx, wy, self.wz]
+            [self.wx, wy, self.wz]
         )
 
         self.dot_roll, _, self.dot_yaw = rpy_dot
@@ -103,18 +105,16 @@ class GazeboCallback:
             self.dot_yaw
         ], dtype=np.float32)
 
-        self.gazebo_reduced_state = np.array([
+
+        self.gazebo_output = np.array([
             self.roll,
-            self.dot_roll,
+            self.wx,
             self.vy,
-            self.dot_yaw,
+            self.wz,
             self.vx,
             self.phi_u
         ], dtype=np.float32)
-        #print(f'self.node.state[4:] {self.node.observed_state_x1}')
-        # self.odom_received = False
-        # self.imu_received = False
-        # self.node.triggered = True
+
  
     def angular_velocity_to_rpy_rates(self, yaw_rate_body):
         """
