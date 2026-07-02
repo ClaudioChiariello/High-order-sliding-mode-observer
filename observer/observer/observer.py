@@ -149,7 +149,7 @@ class TruckStateObserver(Node):
         self.state_data = []
         self.observed_data = []
         self.sim_time = 0.0
-        self.w = np.zeros(6, dtype=np.float64)
+        self.w = np.zeros(5, dtype=np.float64)
 
     def GazeboControl(self):
         msg = Twist()
@@ -168,7 +168,6 @@ class TruckStateObserver(Node):
         Fx, Mz = u
 
         dot_observed_state = None
-
 
         if(num_states == 8):
             if(not self.UseGazeboSim):
@@ -198,10 +197,14 @@ class TruckStateObserver(Node):
 
             dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz, False, dt+self.sim_time)
 
-            self.jacobian = J_h
+            # Remove the 6th row (index 5) along axis 0
+            matrix_reduced = np.delete(J_h, 5, axis=0)
+            # Remove the 5th column (index 4) along axis 1
+            matrix_reduced = np.delete(matrix_reduced, 4, axis=1)
+
+            self.jacobian = matrix_reduced
 
             self.observed_output = h_hat_meas
-
             self.JacobianObserver(dot_observed_state, dt)   
             # For the observer, to use the Urdf parameter for L and delta and not the one defined in simulink
             
@@ -252,11 +255,13 @@ class TruckStateObserver(Node):
 
         J_inv = np.linalg.inv(self.jacobian)
 
-        alpha = 5
+        alpha = 100
 
-        beta = 0.01
+        beta = 1.5
 
         estimated_error = self.output - self.observed_output
+        # Take the estimate error on the first 5 output (I am excluding the vx)
+        estimated_error = estimated_error[:5]
 
         root_abs_error = np.sqrt(np.abs(estimated_error))
 
@@ -267,10 +272,20 @@ class TruckStateObserver(Node):
         sign_error = np.tanh(self.scale_tanh*estimated_error)
 
         self.w += beta*sign_error
+        
+        correction_term = alpha * root_abs_error * sign_error + self.w
 
-        correction_term = alpha*root_abs_error*sign_error + self.w
+        #Remove the 5th elements
+        dot_observed_state_reduced = np.delete(dot_observed_state, 4)
 
-        self.observed_state += (dot_observed_state + J_inv @ correction_term)*dt
+        state_rate_reduced = dot_observed_state_reduced + J_inv @ correction_term
+        # Re-insert a 0.0 value at index 4 so it matches the 6-element layout of self.observed_state
+
+        state_rate_6d = np.insert(state_rate_reduced, 4, 0.0)
+
+        self.observed_state += state_rate_6d * dt
+
+        self.observed_state[4] = self.output[5]
             
         st = self.state
         obs = self.observed_state
