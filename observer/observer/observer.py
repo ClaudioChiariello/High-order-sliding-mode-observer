@@ -254,7 +254,7 @@ class TruckStateObserver(Node):
 
         alpha = 50
 
-        beta = 0.5
+        beta = 1.5
 
         estimated_error = self.output - self.observed_output
 
