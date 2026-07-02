@@ -255,7 +255,7 @@ class TruckStateObserver(Node):
 
         J_inv = np.linalg.inv(self.jacobian)
 
-        alpha = 100
+        alpha = 50
 
         beta = 1.5
 
