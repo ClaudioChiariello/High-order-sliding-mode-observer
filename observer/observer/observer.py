@@ -252,9 +252,9 @@ class TruckStateObserver(Node):
 
         J_inv = np.linalg.inv(self.jacobian)
 
-        alpha = 5
+        alpha = 50
 
-        beta = 0.01
+        beta = 0.5
 
         estimated_error = self.output - self.observed_output
 
