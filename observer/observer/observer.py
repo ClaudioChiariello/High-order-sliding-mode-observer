@@ -67,52 +67,54 @@ class TruckStateObserver(Node):
         if self.get_parameter("use_sim_time").value:
             self.fixed_dt = 1e-3 #lo rendi abbastanza basso da usare il tempo di gazebo
             self.UseGazeboSim = True
+            
+            # self.timer_gazebo = self.create_timer(
+            #     self.fixed_dt, 
+            #     self.GazeboControl,
+            #     callback_group=self.group
+            # )
 
-            self.timer_gazebo = self.create_timer(
-                self.fixed_dt, 
-                self.GazeboControl,
-                callback_group=self.group
-            )
+            # self.gz_pub_ = self.create_publisher(
+            #     Twist,
+            #     '/cmd_vel',
+            #     10
+            # )
 
-            self.gz_pub_ = self.create_publisher(
-                Twist,
-                '/cmd_vel',
-                10
-            )
+            # # To get the parameter from the truck_controller
+            # self.steering_angle_sub = self.create_subscription(
+            #     Float64MultiArray,
+            #     '/steering_controller/commands',
+            #     self.steering_callback,   # callback function
+            #     10,
+            #     callback_group=self.group
+            # )
 
-            # To get the parameter from the truck_controller
-            self.steering_angle_sub = self.create_subscription(
-                Float64MultiArray,
-                '/steering_controller/commands',
-                self.steering_callback,   # callback function
-                10,
-                callback_group=self.group
-            )
+            # self.L = np.zeros(4)
+            # self.param_client = self.create_client(
+            #     GetParameters,
+            #     '/truck_kinematic_control/get_parameters'
+            # )
 
-            self.L = np.zeros(4)
-            self.param_client = self.create_client(
-                GetParameters,
-                '/truck_kinematic_control/get_parameters'
-            )
+            # request = GetParameters.Request()
+            # request.names = ['L1', 'L2', 'L3', 'L4']
+            # future = self.param_client.call_async(request)
+            # future.add_done_callback(self.get_L_parameters)
 
-            request = GetParameters.Request()
-            request.names = ['L1', 'L2', 'L3', 'L4']
-            future = self.param_client.call_async(request)
-            future.add_done_callback(self.get_L_parameters)
+            # self.imu_sub = self.create_subscription(
+            #     Imu,
+            #     '/imu/data', #50Hz
+            #     self.Gazebo.imu_callback,
+            #     10,
+            #     callback_group=self.group
+            # )
 
-            self.imu_sub = self.create_subscription(
-                Imu,
-                '/imu/data', #50Hz
-                self.Gazebo.imu_callback,
-                10
-            )
-
-            self.odom_sub = self.create_subscription(
-                Odometry,
-                '/odometry', #20Hz
-                self.Gazebo.odom_callback,
-                10
-            )
+            # self.odom_sub = self.create_subscription(
+            #     Odometry,
+            #     '/odometry', #20Hz
+            #     self.Gazebo.odom_callback,
+            #     10,
+            #     callback_group=self.group
+            # )
         else:
             self.fixed_dt = 1e-2 #The observer should run at 10ms
 
@@ -146,11 +148,12 @@ class TruckStateObserver(Node):
         self.early = None
 
         self.time_data = []
-        self.state_data = []
+        self.output_data = []
         self.observed_data = []
         self.sim_time = 0.0
         self.w = np.zeros(5, dtype=np.float64)
-
+        self.previous_time = 0.0
+        
     def GazeboControl(self):
         msg = Twist()
         # Linear velocity (m/s)
@@ -162,7 +165,9 @@ class TruckStateObserver(Node):
 
 
     def ModelSimulator(self):
- 
+        now = self.get_clock().now().nanoseconds * 1e-9
+        elapsed_time = now - self.previous_time
+        self.previous_time = self.get_clock().now().nanoseconds * 1e-9
         dt = self.fixed_dt
         u = self.PdController(dt = dt)
         Fx, Mz = u
@@ -192,8 +197,8 @@ class TruckStateObserver(Node):
             else:
 
                 self.output = self.Gazebo.gazebo_output
-            
-                self.truck.getFurtherParameterFromUrdf(self.L, self.delta)
+                self.state = self.Gazebo.gazebo_states
+                #self.truck.getFurtherParameterFromUrdf(self.L, self.delta)
 
             dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz, False, dt+self.sim_time)
 
@@ -210,7 +215,7 @@ class TruckStateObserver(Node):
             
         self.sim_time += dt
         self.time_data.append(self.sim_time)
-        self.state_data.append(self.state.copy())
+        self.output_data.append(self.state.copy())
         self.observed_data.append(self.observed_state.copy())
 
 
@@ -286,8 +291,8 @@ class TruckStateObserver(Node):
         self.observed_state += state_rate_6d * dt
 
         self.observed_state[4] = self.output[5]
-            
-        st = self.state
+
+        st = self.output
         obs = self.observed_state
         self.counter+=1
         if self.counter % 100 == 0:
@@ -348,29 +353,12 @@ class TruckStateObserver(Node):
 
 
     def AtEnd(self):
-        self.plotter.PlotAtEnd(self.state_data, self.observed_data, self.time_data)
+        # Perché i vari thread potrebbero non restare sincronizzati
+        n = min(len(self.time_data),
+        len(self.output_data),
+        len(self.observed_data))
 
- 
-    def steering_callback(self, msg: Float64MultiArray):
-        # Example: first steering command
-        if len(msg.data) > 0:
-            self.delta = msg.data
-
-    def get_L_parameters(self, future):
-        try:
-            result = future.result()
-
-            self.L = [
-                result.values[0].double_value,
-                result.values[1].double_value,
-                result.values[2].double_value,
-                result.values[3].double_value,
-            ]
-
-        except Exception as e:
-            self.get_logger().error(
-                f"Failed to get L parameters: {e}"
-            )
+        self.plotter.PlotAtEnd(self.output_data[:n], self.observed_data[:n], self.time_data[:n])
 
 
 def main(args=None):

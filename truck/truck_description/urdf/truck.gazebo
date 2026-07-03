@@ -334,7 +334,6 @@
 </gazebo>
 
 <gazebo>
-
   <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
     <render_engine>ogre2</render_engine>
   </plugin>
@@ -351,7 +350,15 @@
     <publish_link_pose>true</publish_link_pose>
     <odom_publish_frequency>20</odom_publish_frequency>
   </plugin>
-  
 </gazebo>
+ 
+<!-- <gazebo reference="ghost_to_base_joint">
+  <preserveFixedJoint>true</preserveFixedJoint>
+  <sensor name="base_wrench_sensor" type="force_torque">
+    <always_on>true</always_on>
+    <update_rate>100</update_rate>
+    <topic>/model/truck/base_link/wrench</topic>
+  </sensor>
+</gazebo> -->
 
 </robot>

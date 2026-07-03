@@ -14,7 +14,7 @@
             <param name="max">$(arg steering_limit)</param>
         </command_interface>
         <state_interface name="position"/>
-    </joint>
+        <state_interface name="effort"/> </joint>
 
     <joint name="right_steer_joint_a2">
         <command_interface name="position">
@@ -22,7 +22,7 @@
             <param name="max">$(arg steering_limit)</param>
         </command_interface>
         <state_interface name="position"/>
-    </joint>
+        <state_interface name="effort"/> </joint>
 
         <joint name="left_steer_joint_a1">
         <command_interface name="position">
@@ -30,7 +30,7 @@
             <param name="max">$(arg steering_limit)</param>
         </command_interface>
         <state_interface name="position"/>
-    </joint>
+        <state_interface name="effort"/> </joint>
 
     <joint name="right_steer_joint_a1">
         <command_interface name="position">
@@ -38,31 +38,31 @@
             <param name="max">$(arg steering_limit)</param>
         </command_interface>
         <state_interface name="position"/>
-    </joint>
+        <state_interface name="effort"/> </joint>
 
     <joint name="left_rot_joint_a4">
         <command_interface name="velocity"/>
         <state_interface name="velocity"/>
         <state_interface name="position"/>
-    </joint>
+        <state_interface name="effort"/> </joint>
 
     <joint name="right_rot_joint_a4">
         <command_interface name="velocity"/>
         <state_interface name="velocity"/>
         <state_interface name="position"/>
-    </joint>
+        <state_interface name="effort"/> </joint>
 
     <joint name="left_rot_joint_a3">
         <command_interface name="velocity"/>
         <state_interface name="velocity"/>
         <state_interface name="position"/>
-    </joint>
+        <state_interface name="effort"/> </joint>
 
     <joint name="right_rot_joint_a3">
         <command_interface name="velocity"/>
         <state_interface name="velocity"/>
         <state_interface name="position"/>
-    </joint>
+        <state_interface name="effort"/> </joint>
 </ros2_control>
 
 </robot>

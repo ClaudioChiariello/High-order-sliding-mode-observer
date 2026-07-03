@@ -10,6 +10,7 @@
   <material name="black">
     <color rgba="0.0 0.0 0.0 1.000"/>
   </material>
+  
   <link name="base_link">
     <inertial>
       <origin rpy="0 0 0" xyz="-2.315789406362742 0.060309099677358306 2.0832863727326365"/>

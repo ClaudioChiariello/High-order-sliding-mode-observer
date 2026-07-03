@@ -22,8 +22,9 @@ class GazeboCallback:
         self.node = node
         self.imu_received = False
         self.odom_received = False
-        self.gazebo_full_state = np.zeros(8, dtype='float32')
-        self.gazebo_output = np.zeros(6, dtype='float32')
+        num_states = 6
+        self.gazebo_states = np.zeros(num_states, dtype='float32')
+        self.gazebo_output = np.zeros(num_states, dtype='float32')
         
         self.roll = np.float32(0.0)
         self.yaw = np.float32(0.0)
@@ -35,8 +36,10 @@ class GazeboCallback:
         self.dot_roll = np.float32(0.0)
         self.dot_yaw = np.float32(0.0)
         self.wx = np.float32(0.0)
+        self.previous_wx = np.float32(0.0)
+        self.dot_wx = np.float32(0.0)
         self.wz = 0.0
-
+        self.ay = np.float32(0.0) 
         self.phi_u = np.float32(0.0)
     
     #Called every 20ms (50Hz) 
@@ -67,14 +70,15 @@ class GazeboCallback:
         self.dot_roll, _, self.dot_yaw = rpy_dot
 
         ax = msg.linear_acceleration.x
-        ay = msg.linear_acceleration.y
+        self.ay = msg.linear_acceleration.y
         az = msg.linear_acceleration.z
 
         # self.node.get_logger().info(
         #     f"IMU acc: [{ax:.2f}, {ay:.2f}, {az:.2f}] "
         #     f"gyro: [{wx:.2f}, {wy:.2f}, {wz:.2f}]"
         # )
-        
+        self.dot_wx = (self.wx - self.previous_wx)/0.001
+        self.previous_wx = self.wx
         self.imu_received = True
         self.update_error()
 
@@ -93,26 +97,24 @@ class GazeboCallback:
 
     def update_error(self):
 
-            
-        self.gazebo_full_state = np.array([
-            self.x,
-            self.y,
-            self.roll,
-            self.yaw,
-            self.vx,
-            self.vy,
-            self.dot_roll,
-            self.dot_yaw
-        ], dtype=np.float32)
 
-
-        self.gazebo_output = np.array([
+        self.gazebo_states = np.array([
             self.roll,
             self.wx,
             self.vy,
             self.wz,
             self.vx,
-            self.phi_u
+            self.roll
+        ], dtype=np.float32)
+
+
+        self.gazebo_output = np.array([
+            self.roll,
+            self.ay,
+            self.wx,
+            self.dot_wx,
+            self.wz,
+            self.vx,
         ], dtype=np.float32)
 
  

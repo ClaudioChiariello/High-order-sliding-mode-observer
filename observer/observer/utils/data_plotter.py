@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import os
 import numpy as np
-from observer.utils.states import obs_state as s
+from observer.utils.states import obs_state as obs
+from observer.utils.states import outputs as out
 
 class DataPlotter:
 
@@ -14,48 +15,49 @@ class DataPlotter:
 
         self.data = {}
 
-    def PlotAtEnd(self, state_data, observed_data, time_data):
+    def PlotAtEnd(self, output_data, observed_data, time_data):
 
-        state = np.array(state_data)
+        
+        state = np.array(output_data)
         observed = np.array(observed_data)
         time = np.array(time_data)
 
         self.plot(
             time,
-            state[:, s.VX],
-            observed[:, s.VX],
+            state[:, obs.VX],
+            observed[:, obs.VX],
             ylabel="vx [m/s]",
             filename="forward_vel.png"
         )
 
         self.plot(
             time,
-            state[:, s.VY],
-            observed[:, s.VY],
+            state[:, obs.VY],
+            observed[:, obs.VY],
             ylabel="vy [m/s]",
             filename="lateral_vel.png"
         )
 
         self.plot(
             time,
-            state[:, s.WZ],
-            observed[:, s.WZ],
+            state[:, obs.WZ],
+            observed[:, obs.WZ],
             ylabel="wz [rad/s]",
             filename="angular_vel_z.png"
         )
 
-        self.plot(
-            time,
-            state[:, s.PHI_U],
-            observed[:, s.PHI_U],
-            ylabel="phi_u [rad]",
-            filename="phi_u.png"
-        )
+        # self.plot(
+        #     time,
+        #     state[:, obs.DOT_WX],
+        #     observed[:, obs.DOT_WX],
+        #     ylabel="phi_u [rad]",
+        #     filename="phi_u.png"
+        # )
 
         self.plot(
             time,
-            state[:, s.ROLL],
-            observed[:, s.ROLL],
+            state[:, obs.ROLL],
+            observed[:, obs.ROLL],
             ylabel="phi_tot [rad]",
             filename="phi_tot.png"
         )
