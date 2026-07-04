@@ -15,41 +15,78 @@ from launch.event_handlers import OnProcessStart
 
 
 def generate_launch_description():
-    pkg_name = get_package_share_directory("observer")
 
-    # Launch arguments
-    world_file = os.path.join(pkg_name, "worlds", "truck_world.sdf")
+    observer = get_package_share_directory("observer")
+    world_file = os.path.join(observer, "worlds", "truck_world.sdf")
 
     controller_manager_config_file = PathJoinSubstitution([
         FindPackageShare("truck_controller_pkg"),
         "config",
         "truck8x4_controllers.yaml"
     ])
+
     xacro_file = PathJoinSubstitution([
         FindPackageShare("piramide_bringup"),
         "urdf",
         "piramide_truck.xacro"
     ])
 
-    control_mode = LaunchConfiguration("control_mode")
-    driven_wheels = LaunchConfiguration("driven_wheels")
-    control_algorithm = LaunchConfiguration("control_algorithm")
-    app_point_offset = LaunchConfiguration("app_point_offset")
-    steering_limit = LaunchConfiguration("steering_limit")
- 
-
     ros_gz_sim_pkg_path = get_package_share_directory('ros_gz_sim')
     gz_launch_path = PathJoinSubstitution([ros_gz_sim_pkg_path, 'launch', 'gz_sim.launch.py'])
  
 
-    robot_description = Command(["xacro ", xacro_file,
-        " control_mode:=", control_mode,
-        " driven_wheels:=", driven_wheels,
-        " app_point_offset:=", app_point_offset,
-        " steering_limit:=", steering_limit
+    robot_description = Command([
+        "xacro ", xacro_file,
+        " control_mode:=", LaunchConfiguration("control_mode"),
+        " driven_wheels:=",  LaunchConfiguration("driven_wheels"),
+        " app_point_offset:=", LaunchConfiguration("app_point_offset"),
+        " steering_limit:=", LaunchConfiguration("steering_limit")
     ])
 
- 
+    controllers_to_spawn = ["joint_state_broadcaster", "traction_controller", "steering_controller"]
+    
+    nodes = []
+    for controller in controllers_to_spawn:
+        nodes.append(
+            Node(
+                package="controller_manager",
+                executable="spawner",
+                arguments=[controller, "--param-file", controller_manager_config_file],
+                output="both",
+            )
+    )
+    nodes.append(
+        Node(
+            package="robot_state_publisher",
+            executable="robot_state_publisher",
+            parameters=[{
+                "robot_description": robot_description,
+                "use_sim_time": LaunchConfiguration("use_sim_time")
+            }]
+        ),
+    
+    )
+    nodes.append(
+        Node(
+            package='truck_control',
+            executable=['truck_', LaunchConfiguration('control_algorithm')],
+            name=['truck_', LaunchConfiguration('control_algorithm')],
+            output='screen',
+            parameters=[{
+                'driven_wheels': LaunchConfiguration('driven_wheels'),
+                'rear_wheel_separation': LaunchConfiguration('rear_wheel_separation'),
+                'front_wheel_separation': LaunchConfiguration('front_wheel_separation'),
+                'wheel_radius': LaunchConfiguration('wheel_radius'),
+                'front_wheel_base': LaunchConfiguration('front_wheel_base'),
+                'central_wheel_base': LaunchConfiguration('central_wheel_base'),
+                'rear_wheel_base': LaunchConfiguration('rear_wheel_base'),
+                'steering_limit': LaunchConfiguration('steering_limit'),
+                'app_point_offset': LaunchConfiguration('app_point_offset'),
+                'rear_centerline_pos': LaunchConfiguration('rear_centerline_pos'),
+                'use_sim_time': LaunchConfiguration('use_sim_time'),
+            }]
+        )
+    )
 
     return LaunchDescription([
 
@@ -69,16 +106,6 @@ def generate_launch_description():
         DeclareLaunchArgument('rear_wheel_base', default_value='1.382'),
         DeclareLaunchArgument('rear_centerline_pos', default_value='2.6815'),
 
-        # robot_state_publisher
-        Node(
-            package="robot_state_publisher",
-            executable="robot_state_publisher",
-            parameters=[{
-                "robot_description": robot_description,
-                "use_sim_time": LaunchConfiguration("use_sim_time")
-            }]
-        ),
- 
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(gz_launch_path),
             launch_arguments={
@@ -101,26 +128,6 @@ def generate_launch_description():
             ]
         ),
 
-        # # control mode
-        Node(
-            package='truck_control',
-            executable=['truck_', LaunchConfiguration('control_algorithm')],
-            name=['truck_', LaunchConfiguration('control_algorithm')],
-            output='screen',
-            parameters=[{
-                'driven_wheels': LaunchConfiguration('driven_wheels'),
-                'rear_wheel_separation': LaunchConfiguration('rear_wheel_separation'),
-                'front_wheel_separation': LaunchConfiguration('front_wheel_separation'),
-                'wheel_radius': LaunchConfiguration('wheel_radius'),
-                'front_wheel_base': LaunchConfiguration('front_wheel_base'),
-                'central_wheel_base': LaunchConfiguration('central_wheel_base'),
-                'rear_wheel_base': LaunchConfiguration('rear_wheel_base'),
-                'steering_limit': LaunchConfiguration('steering_limit'),
-                'app_point_offset': LaunchConfiguration('app_point_offset'),
-                'rear_centerline_pos': LaunchConfiguration('rear_centerline_pos'),
-                'use_sim_time': LaunchConfiguration('use_sim_time'),
-            }]
-        ),
         Node(
             package='ros_gz_bridge',
             executable='parameter_bridge',
@@ -135,60 +142,7 @@ def generate_launch_description():
             # ],
             output='screen'
         ),
+        *nodes
 
-        TimerAction(
-            period=3.0,
-            actions=[
-                Node(
-                    package='controller_manager',
-                    executable='spawner',
-                    arguments=[
-                        'joint_state_broadcaster',
-                        '--controller-manager',
-                        '/controller_manager'
-                    ],
-                    output='screen'
-                )
-            ]
-        ),
-
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=["traction_controller",
-                '--controller-manager',
-                '/controller_manager'
-            ],
-            output='screen'
-        ),
-        Node(
-            package='controller_manager',
-            executable='spawner',
-            arguments=["steering_controller",
-                '--controller-manager',
-                '/controller_manager'
-            ],
-            output='screen'
-        ),
-
-
-              
-        # DeclareLaunchArgument('scale_tanh', default_value='10'),
-        # DeclareLaunchArgument('des_vel_x', default_value='10'),
-        # DeclareLaunchArgument('des_omega_z', default_value='0.6'),
-        # Node(
-        #     package='observer',
-        #     executable='observer',
-        #     name='HOSMO',
-        #     output='screen',
-        #     parameters=[
-        #         {   
-        #             "scale_tanh": LaunchConfiguration('scale_tanh'),
-        #             "des_vel_x": LaunchConfiguration('des_vel_x'),
-        #             "des_omega_z": LaunchConfiguration('des_omega_z'),
-        #             'use_sim_time': True
-        #         }
-        #     ]
-        # ),
     ]
 )

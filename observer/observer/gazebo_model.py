@@ -2,7 +2,10 @@ from sensor_msgs.msg import Imu
 from nav_msgs.msg import Odometry
 from tf2_msgs.msg import TFMessage
 from tf_transformations import euler_from_quaternion, quaternion_matrix
- 
+
+from observer.utils.states import obs_state as s
+from observer.utils.states import outputs as out
+
 import numpy as np
 
 """A callback handler is not a ROS node. It doesn't need:
@@ -23,8 +26,9 @@ class GazeboCallback:
         self.imu_received = False
         self.odom_received = False
         num_states = 6
-        self.gazebo_states = np.zeros(num_states, dtype='float32')
-        self.gazebo_output = np.zeros(num_states, dtype='float32')
+        num_outputs = 6 
+        self.gazebo_state = np.zeros(num_states, dtype='float32')
+        self.gazebo_output = np.zeros(num_outputs, dtype='float32')
         
         self.roll = np.float32(0.0)
         self.yaw = np.float32(0.0)
@@ -33,9 +37,6 @@ class GazeboCallback:
         self.vx = np.float32(0.0)
         self.vy = np.float32(0.0)
 
-        self.dot_roll = np.float32(0.0)
-        self.dot_yaw = np.float32(0.0)
-        self.wx = np.float32(0.0)
         self.previous_wx = np.float32(0.0)
         self.dot_wx = np.float32(0.0)
         self.wz = 0.0
@@ -56,66 +57,58 @@ class GazeboCallback:
             self.node.rotation_body2world = quaternion_matrix(q)[:3, :3].T
       
         # in radians
-        self.roll, self.pitch, self.yaw = euler_from_quaternion(q)
+        self.gazebo_state[s.ROLL], _, _ = euler_from_quaternion(q)
+        self.gazebo_output[out.ROLL] = self.gazebo_state[s.ROLL]
 
         # Angular velocity
-        self.wx = msg.angular_velocity.x
-        wy = msg.angular_velocity.y
-        self.wz = msg.angular_velocity.z
+        self.gazebo_state[s.WX] = msg.angular_velocity.x
+        self.gazebo_output[out.WX] = msg.angular_velocity.x
 
-        rpy_dot = self.angular_velocity_to_rpy_rates(
-            [self.wx, wy, self.wz]
-        )
+        self.gazebo_state[s.WZ] = msg.angular_velocity.z
+        self.gazebo_output[out.WZ] = msg.angular_velocity.z
 
-        self.dot_roll, _, self.dot_yaw = rpy_dot
+        self.gazebo_output[out.ACC_Y] = msg.linear_acceleration.y
 
-        ax = msg.linear_acceleration.x
-        self.ay = msg.linear_acceleration.y
-        az = msg.linear_acceleration.z
-
-        # self.node.get_logger().info(
-        #     f"IMU acc: [{ax:.2f}, {ay:.2f}, {az:.2f}] "
-        #     f"gyro: [{wx:.2f}, {wy:.2f}, {wz:.2f}]"
-        # )
         self.dot_wx = (self.wx - self.previous_wx)/0.001
         self.previous_wx = self.wx
+
         self.imu_received = True
         self.update_error()
 
     #Called every 50ms (20Hz) 
     def odom_callback(self, odom_msg):
 
-        self.x = odom_msg.pose.pose.position.x
-        self.y = odom_msg.pose.pose.position.y
 
-        self.vx = odom_msg.twist.twist.linear.x
-        self.vy = odom_msg.twist.twist.linear.y
+        self.gazebo_state[s.VX] = odom_msg.twist.twist.linear.x
+        self.gazebo_output[out.VX] = odom_msg.twist.twist.linear.x
+
+        self.gazebo_state[s.VY] = odom_msg.twist.twist.linear.y
 
         self.odom_received = True
         self.update_error()
 
 
-    def update_error(self):
+    # def update_error(self):
 
 
-        self.gazebo_states = np.array([
-            self.roll,
-            self.wx,
-            self.vy,
-            self.wz,
-            self.vx,
-            self.roll
-        ], dtype=np.float32)
+    #     self.gazebo_states = np.array([
+    #         self.roll,
+    #         self.wx,
+    #         self.vy,
+    #         self.wz,
+    #         self.vx,
+    #         self.roll
+    #     ], dtype=np.float32)
 
 
-        self.gazebo_output = np.array([
-            self.roll,
-            self.ay,
-            self.wx,
-            self.dot_wx,
-            self.wz,
-            self.vx,
-        ], dtype=np.float32)
+    #     self.gazebo_output = np.array([
+    #         self.roll,
+    #         self.ay,
+    #         self.wx,
+    #         self.dot_wx,
+    #         self.wz,
+    #         self.vx,
+    #     ], dtype=np.float32)
 
  
     def angular_velocity_to_rpy_rates(self, yaw_rate_body):
