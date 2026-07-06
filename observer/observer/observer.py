@@ -141,12 +141,19 @@ class TruckStateObserver(Node):
 
         self.time_data = []
         self.output_data = []
-        self.observed_data = []
+        self.state_data = []
+        self.observed_state_data = []
+        self.observed_output_data = []
         self.sim_time = 0.0
 
-        self.w = np.zeros(5, dtype=np.float64)
+
         self.previous_time = 0.0
-        
+        self.jacobian_reduced = False
+        if(self.jacobian_reduced):
+                self.w = np.zeros(5, dtype=np.float64)
+        else:
+            self.w = np.zeros(6, dtype=np.float64)
+
     def GazeboControl(self):
         msg = Twist()
         # Linear velocity (m/s)
@@ -181,42 +188,46 @@ class TruckStateObserver(Node):
 
             self.state = self.Gazebo.gazebo_states
 
-        # dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz, False, dt+self.sim_time)
+        dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz, False, dt+self.sim_time)
 
-        # # Remove the 6th row (index 5) along axis 0
-        # matrix_reduced = np.delete(J_h, 5, axis=0)
-        # # Remove the 5th column (index 4) along axis 1
-        # matrix_reduced = np.delete(matrix_reduced, 4, axis=1)
-
-        # self.jacobian = matrix_reduced
-
-        # self.observed_output = h_hat_meas
-        # self.JacobianObserver(dot_observed_state, dt)   
-        # # For the observer, to use the Urdf parameter for L and delta and not the one defined in simulink
+        # Remove the row of the Jacobian corresponding to h(x_6) = vx
+        if (self.jacobian_reduced):
+            matrix_reduced = np.delete(J_h, out.VX, axis=0)
+            matrix_reduced = np.delete(matrix_reduced, s.VX, axis=1)
+            self.jacobian = matrix_reduced
+        else:
+            self.jacobian = J_h
+        self.observed_output = h_hat_meas
+        self.JacobianObserver(dot_observed_state, dt)   
         
-        # self.sim_time += dt
-        # self.time_data.append(self.sim_time)
-        # self.output_data.append(self.state.copy())
-        # self.observed_data.append(self.observed_state.copy())
+
+        self.sim_time += dt
+        self.time_data.append(self.sim_time)
+        self.state_data.append(self.state.copy())
+        self.output_data.append(self.output.copy())
+        self.observed_state_data.append(self.observed_state.copy())
+        self.observed_output_data.append(self.observed_output.copy())
+
    
     def JacobianObserver(self, dot_observed_state, dt):
-
+        #print(self.jacobian, "\n\n")
+        
         J_inv = np.linalg.inv(self.jacobian)
-
+        # print(J_inv, "\n\n")
         alpha = 50
 
         beta = 1.5
 
         estimated_error = self.output - self.observed_output
-        estimate_error[out.DOT_WX] = estimated_error[out.WX]
-
-        # Take the estimate error on the first 5 output (I am excluding the vx)
-        estimated_error = estimated_error[:5]
+        if(self.jacobian_reduced):
+            estimated_error = estimated_error[:out.VX]
+        #estimated_error[out.DOT_WX] = estimated_error[out.WX]
 
         root_abs_error = np.sqrt(np.abs(estimated_error))
 
-        root_abs_error[2] = np.abs(estimated_error[2]) ** (2/3)
-        root_abs_error[3] = np.abs(estimated_error[3]) ** (2/3)
+        # 2. Overwrite just the specific indices using vectorized assignment
+        root_abs_error[out.WX] = np.abs(estimated_error[2]) ** (1/3)
+        root_abs_error[out.DOT_WX] = np.abs(estimated_error[3]) ** (2/3)
 
         sign_error = np.tanh(self.scale_tanh*estimated_error)
 
@@ -225,20 +236,23 @@ class TruckStateObserver(Node):
         correction_term = alpha * root_abs_error * sign_error + self.w
 
         #Remove the 5th elements
-        dot_observed_state_reduced = np.delete(dot_observed_state, 4)
+        if (self.jacobian_reduced):
+            dot_observed_state_reduced = np.delete(dot_observed_state, s.VX)
 
-        state_rate_reduced = dot_observed_state_reduced + J_inv @ correction_term
-        # Re-insert a 0.0 value at index 4 so it matches the 6-element layout of self.observed_state
+            state_rate_reduced = dot_observed_state_reduced + J_inv @ correction_term
+            # Re-insert a 0.0 value at index 4 so it matches the 6-element layout of self.observed_state
 
-        state_rate_6d = np.insert(state_rate_reduced, 4, 0.0)
+            state = np.insert(state_rate_reduced, s.VX, 0.0)
+            
+        else:
+            state = dot_observed_state + J_inv @ correction_term
 
-        self.observed_state += state_rate_6d * dt
+        self.observed_state += state * dt
 
-        self.observed_state[4] = self.output[5]
-
-        st = self.output
+        #self.observed_state[4] = self.output[5]
+            
+        st = self.state
         obs = self.observed_state
-
         self.counter+=1
         if self.counter % 100 == 0:
             self.get_logger().info(
@@ -250,7 +264,6 @@ class TruckStateObserver(Node):
             f"wz={st[s.WZ]:7.3f} ({obs[s.WZ]:7.3f})\n"
             f"dt={dt:.4f}"
         )
-
 
     def PdController(self, dt):
 
@@ -289,10 +302,14 @@ class TruckStateObserver(Node):
     def AtEnd(self):
         # Perché i vari thread potrebbero non restare sincronizzati
         n = min(len(self.time_data),
+        len(self.state_data),
         len(self.output_data),
-        len(self.observed_data))
+        len(self.observed_state_data),
+        len(self.observed_output_data)
+        )
 
-        self.plotter.PlotAtEnd(self.output_data[:n], self.observed_data[:n], self.time_data[:n])
+        self.plotter.PlotAtEnd(self.state_data[:n],  self.output_data[:n],
+                            self.observed_state_data[:n], self.observed_output_data[:n], self.time_data[:n])
 
 
 def main(args=None):

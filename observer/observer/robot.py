@@ -3,7 +3,7 @@ import os
 from ament_index_python.packages import get_package_share_directory 
 import pinocchio
 import numpy as np
-from .utils.states import state as s
+from observer.utils.states import obs_state as s
 import ctypes
 
 class robot:
@@ -138,7 +138,7 @@ class robot:
             )
 
             if(use_dist):
-                 dot_x += np.sin(2*np.pi*0.5*dt)
+                 dot_x[:s.VY] += np.sin(2*np.pi*0.5*dt)
                  dot_x[-1] = 0.8*np.sin(2*np.pi*0.05*dt)
             
             # Reshape flat 1D output buffers back into proper 2D matrices

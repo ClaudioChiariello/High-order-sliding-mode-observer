@@ -10,8 +10,10 @@ class obs_state(IntEnum):
 
 class outputs(IntEnum):
     ROLL = 0
-    ACC_Y = 1
+    VX = 5
+    VY = 6
     WX = 2
     DOT_WX = 3
     WZ = 4
-    VX = 5
+    ACC_Y = 1
+

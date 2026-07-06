@@ -15,49 +15,64 @@ class DataPlotter:
 
         self.data = {}
 
-    def PlotAtEnd(self, output_data, observed_data, time_data):
+    def PlotAtEnd(self, sate_data, output_data, observed_state_data, observed_output_data, time_data):
 
-        
-        state = np.array(output_data)
-        observed = np.array(observed_data)
+        state = np.array(sate_data)
+        output = np.array(output_data)
+        observed_state = np.array(observed_state_data)
+        observed_out = np.array(observed_output_data)
         time = np.array(time_data)
+
+        self.plot(time,
+            output[:, out.VX],
+            observed_out[:, out.VX], ylabel="vx [m/s]", filename="forward_vel.png"
+        )
 
         self.plot(
             time,
-            state[:, obs.VX],
-            observed[:, obs.VX],
-            ylabel="vx [m/s]",
-            filename="forward_vel.png"
+            output[:, out.ACC_Y],
+            observed_out[:, out.ACC_Y],
+            ylabel="ay [m/s^2]",
+            filename="LAteral_ACC.png"
         )
 
         self.plot(
             time,
             state[:, obs.VY],
-            observed[:, obs.VY],
+            observed_state[:, obs.VY],
             ylabel="vy [m/s]",
-            filename="lateral_vel.png"
+            filename="Lateral_vel.png"
         )
+
 
         self.plot(
             time,
-            state[:, obs.WZ],
-            observed[:, obs.WZ],
+            output[:, out.WZ],
+            observed_out[:, out.WZ],
             ylabel="wz [rad/s]",
             filename="angular_vel_z.png"
         )
 
-        # self.plot(
-        #     time,
-        #     state[:, obs.DOT_WX],
-        #     observed[:, obs.DOT_WX],
-        #     ylabel="phi_u [rad]",
-        #     filename="phi_u.png"
-        # )
+        self.plot(
+            time,
+            output[:, out.DOT_WX],
+            observed_out[:, out.DOT_WX],
+            ylabel="dot_WX [rad/s^2]",
+            filename="dot_Wx.png"
+        )
 
         self.plot(
             time,
-            state[:, obs.ROLL],
-            observed[:, obs.ROLL],
+            state[:, obs.WX],
+            observed_state[:, obs.WX],
+            ylabel="WX [rad/s]",
+            filename="WX.png"
+        )
+
+        self.plot(
+            time,
+            output[:, out.ROLL],
+            observed_out[:, out.ROLL],
             ylabel="phi_tot [rad]",
             filename="phi_tot.png"
         )
@@ -72,8 +87,8 @@ class DataPlotter:
 
         plt.figure(figsize=(10, 6))
 
-        plt.plot(time, real, label="Real")
-        plt.plot(time, observed, label="Observed")
+        plt.plot(time, real, label="Real", linewidth=2.5)
+        plt.plot(time, observed, label="Observed", linestyle="--", linewidth=1.5)
 
         plt.xlabel("time [s]")
         plt.ylabel(ylabel)
