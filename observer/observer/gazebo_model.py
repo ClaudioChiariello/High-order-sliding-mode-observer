@@ -8,6 +8,8 @@ from observer.utils.states import outputs as out
 
 import numpy as np
 
+import threading
+
 """A callback handler is not a ROS node. It doesn't need:
 
 publishers
@@ -30,86 +32,78 @@ class GazeboCallback:
         self.gazebo_state = np.zeros(num_states, dtype='float32')
         self.gazebo_output = np.zeros(num_outputs, dtype='float32')
         
-        self.roll = np.float32(0.0)
-        self.yaw = np.float32(0.0)
-        self.x = np.float32(0.0)
-        self.y = np.float32(0.0)
+     
         self.vx = np.float32(0.0)
         self.vy = np.float32(0.0)
-
-        self.previous_wx = np.float32(0.0)
-        self.dot_wx = np.float32(0.0)
         self.wz = 0.0
         self.ay = np.float32(0.0) 
         self.phi_u = np.float32(0.0)
+
+        self.previous_time = 0.0
+        self.lock = threading.Lock()
     
     #Called every 20ms (50Hz) 
     def imu_callback(self, msg):
         
+        now = self.node.get_clock().now().nanoseconds * 1e-9
+
+        if self.previous_time == 0.0:
+            self.previous_time = now
+            return
+
+        dt = now - self.previous_time
+        self.previous_time = now
+
         q = [
             msg.orientation.x,
             msg.orientation.y,
             msg.orientation.z,
             msg.orientation.w
         ]
+        roll, _, _ = euler_from_quaternion(q)
 
         if(self.node.UseGazeboSim):
             self.node.rotation_body2world = quaternion_matrix(q)[:3, :3].T
       
-        # in radians
-        self.gazebo_state[s.ROLL], _, _ = euler_from_quaternion(q)
-        self.gazebo_output[out.ROLL] = self.gazebo_state[s.ROLL]
+        with self.lock:
 
-        # Angular velocity
-        self.gazebo_state[s.WX] = msg.angular_velocity.x
-        self.gazebo_output[out.WX] = msg.angular_velocity.x
+            self.gazebo_state[s.ROLL] = roll
+            self.gazebo_output[out.ROLL] = roll
 
-        self.gazebo_state[s.WZ] = msg.angular_velocity.z
-        self.gazebo_output[out.WZ] = msg.angular_velocity.z
+            self.gazebo_state[s.WX] = msg.angular_velocity.x
+            self.gazebo_output[out.WX] = msg.angular_velocity.x
 
-        self.gazebo_output[out.ACC_Y] = msg.linear_acceleration.y
+            self.gazebo_state[s.WZ] = msg.angular_velocity.z
+            self.gazebo_output[out.WZ] = msg.angular_velocity.z
 
-        self.dot_wx = (self.wx - self.previous_wx)/0.001
-        self.previous_wx = self.wx
+            self.gazebo_output[out.ACC_Y] = msg.linear_acceleration.y
 
         self.imu_received = True
-        self.update_error()
 
     #Called every 50ms (20Hz) 
     def odom_callback(self, odom_msg):
 
+        with self.lock:
 
-        self.gazebo_state[s.VX] = odom_msg.twist.twist.linear.x
-        self.gazebo_output[out.VX] = odom_msg.twist.twist.linear.x
+            self.gazebo_state[s.VX] = odom_msg.twist.twist.linear.x
 
-        self.gazebo_state[s.VY] = odom_msg.twist.twist.linear.y
+            self.gazebo_output[out.VX] = odom_msg.twist.twist.linear.x
+
+            self.gazebo_state[s.VY] =  odom_msg.twist.twist.linear.y
 
         self.odom_received = True
-        self.update_error()
 
 
-    # def update_error(self):
+    def get_state_output(self):
+
+        with self.lock:
+            state = self.gazebo_state.copy()
+            output = self.gazebo_output.copy()
+
+        return state, output
 
 
-    #     self.gazebo_states = np.array([
-    #         self.roll,
-    #         self.wx,
-    #         self.vy,
-    #         self.wz,
-    #         self.vx,
-    #         self.roll
-    #     ], dtype=np.float32)
-
-
-    #     self.gazebo_output = np.array([
-    #         self.roll,
-    #         self.ay,
-    #         self.wx,
-    #         self.dot_wx,
-    #         self.wz,
-    #         self.vx,
-    #     ], dtype=np.float32)
-
+ 
  
     def angular_velocity_to_rpy_rates(self, yaw_rate_body):
         """

@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-import sys
-import argparse
 import rclpy
 from rclpy.node import Node
 
@@ -12,7 +10,7 @@ import tf2_ros
 from tf_transformations import quaternion_matrix
 
 from .gazebo_model import GazeboCallback
-from . import robot
+from observer import robot
 from observer.utils.data_plotter import DataPlotter
 
 from observer.utils.states import obs_state as s
@@ -25,6 +23,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from std_msgs.msg import Float64MultiArray
 from rcl_interfaces.srv import GetParameters
 
+from rclpy.qos import qos_profile_sensor_data
 
 
 class TruckStateObserver(Node):
@@ -52,66 +51,46 @@ class TruckStateObserver(Node):
 
         self.UseGazeboSim = False
         if self.get_parameter("use_sim_time").value:
-            self.fixed_dt = 1e-3 #lo rendi abbastanza basso da usare il tempo di gazebo
+            self.fixed_dt = 1e-2 #lo rendi abbastanza basso da usare il tempo di gazebo
             self.UseGazeboSim = True
             
-            # self.timer_gazebo = self.create_timer(
-            #     self.fixed_dt, 
-            #     self.GazeboControl,
-            #     callback_group=self.group
-            # )
+            self.timer_gazebo = self.create_timer(
+                self.fixed_dt, 
+                self.GazeboControl,
+                callback_group=self.group
+            )
 
-            # self.gz_pub_ = self.create_publisher(
-            #     Twist,
-            #     '/cmd_vel',
-            #     10
-            # )
+            self.gz_pub_ = self.create_publisher(
+                Twist,
+                '/cmd_vel',
+                10
+            )
 
-            # # To get the parameter from the truck_controller
-            # self.steering_angle_sub = self.create_subscription(
-            #     Float64MultiArray,
-            #     '/steering_controller/commands',
-            #     self.steering_callback,   # callback function
-            #     10,
-            #     callback_group=self.group
-            # )
+            self.imu_sub = self.create_subscription(
+                Imu,
+                '/imu/data', #50Hz
+                self.Gazebo.imu_callback,
+                qos_profile_sensor_data,
+                callback_group=self.group
+            )
 
-            # self.L = np.zeros(4)
-            # self.param_client = self.create_client(
-            #     GetParameters,
-            #     '/truck_kinematic_control/get_parameters'
-            # )
-
-            # request = GetParameters.Request()
-            # request.names = ['L1', 'L2', 'L3', 'L4']
-            # future = self.param_client.call_async(request)
-            # future.add_done_callback(self.get_L_parameters)
-
-            # self.imu_sub = self.create_subscription(
-            #     Imu,
-            #     '/imu/data', #50Hz
-            #     self.Gazebo.imu_callback,
-            #     10,
-            #     callback_group=self.group
-            # )
-
-            # self.odom_sub = self.create_subscription(
-            #     Odometry,
-            #     '/odometry', #20Hz
-            #     self.Gazebo.odom_callback,
-            #     10,
-            #     callback_group=self.group
-            # )
+            self.odom_sub = self.create_subscription(
+                Odometry,
+                '/odometry', #20Hz
+                self.Gazebo.odom_callback,
+                qos_profile_sensor_data,
+                callback_group=self.group
+            )
         else:
             self.fixed_dt = 1e-2 #The observer should run at 10ms
 
         self.delta = np.zeros(2, dtype='float32')
         self.rotation_body2world = np.zeros((3,3), dtype='float32')
         
-        # State terms
         num_states = 6
         num_outputs = 6
 
+        # State terms
         self.state = np.zeros(num_states, dtype=np.float64)
 
         self.output = np.zeros(num_outputs, dtype="float32")
@@ -137,7 +116,6 @@ class TruckStateObserver(Node):
         )
 
         self.counter = 0
-        self.early = None
 
         self.time_data = []
         self.output_data = []
@@ -149,10 +127,8 @@ class TruckStateObserver(Node):
 
         self.previous_time = 0.0
         self.jacobian_reduced = False
-        if(self.jacobian_reduced):
-                self.w = np.zeros(5, dtype=np.float64)
-        else:
-            self.w = np.zeros(6, dtype=np.float64)
+        self.w = np.zeros(5, dtype=np.float64)
+
 
     def GazeboControl(self):
         msg = Twist()
@@ -165,9 +141,16 @@ class TruckStateObserver(Node):
 
 
     def ModelSimulator(self):
-        now = self.get_clock().now().nanoseconds * 1e-9
-        elapsed_time = now - self.previous_time
-        self.previous_time = self.get_clock().now().nanoseconds * 1e-9
+        # now = self.get_clock().now().nanoseconds * 1e-9
+
+        # if self.previous_time == 0.0:
+        #     self.previous_time = now
+        #     return
+
+        # dt = now - self.previous_time
+        # self.previous_time = now
+        # print(dt)
+
         dt = self.fixed_dt
         u = self.PdController(dt = dt)
         Fx, Mz = u
@@ -184,20 +167,19 @@ class TruckStateObserver(Node):
 
         else:
 
-            self.output = self.Gazebo.gazebo_output
+            state, output = self.Gazebo.get_state_output()
 
-            self.state = self.Gazebo.gazebo_states
+            self.state = state.copy()
+            self.output = output.copy()
 
         dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz, False, dt+self.sim_time)
 
         # Remove the row of the Jacobian corresponding to h(x_6) = vx
-        if (self.jacobian_reduced):
-            matrix_reduced = np.delete(J_h, out.VX, axis=0)
-            matrix_reduced = np.delete(matrix_reduced, s.VX, axis=1)
-            self.jacobian = matrix_reduced
-        else:
-            self.jacobian = J_h
+        matrix_reduced = np.delete(J_h, out.VX, axis=0)
+        matrix_reduced = np.delete(matrix_reduced, s.VX, axis=1)
+        self.jacobian = matrix_reduced
         self.observed_output = h_hat_meas
+
         self.JacobianObserver(dot_observed_state, dt)   
         
 
@@ -219,15 +201,14 @@ class TruckStateObserver(Node):
         beta = 1.5
 
         estimated_error = self.output - self.observed_output
-        if(self.jacobian_reduced):
-            estimated_error = estimated_error[:out.VX]
+        estimated_error = estimated_error[:5]
         #estimated_error[out.DOT_WX] = estimated_error[out.WX]
 
         root_abs_error = np.sqrt(np.abs(estimated_error))
 
         # 2. Overwrite just the specific indices using vectorized assignment
-        root_abs_error[out.WX] = np.abs(estimated_error[2]) ** (1/3)
-        root_abs_error[out.DOT_WX] = np.abs(estimated_error[3]) ** (2/3)
+        root_abs_error[2] = np.abs(estimated_error[2]) ** (2/3)
+        root_abs_error[3] = np.abs(estimated_error[2]) ** (1/3)
 
         sign_error = np.tanh(self.scale_tanh*estimated_error)
 
@@ -236,23 +217,21 @@ class TruckStateObserver(Node):
         correction_term = alpha * root_abs_error * sign_error + self.w
 
         #Remove the 5th elements
-        if (self.jacobian_reduced):
-            dot_observed_state_reduced = np.delete(dot_observed_state, s.VX)
+        dot_observed_state_reduced = np.delete(dot_observed_state, s.VX)
 
-            state_rate_reduced = dot_observed_state_reduced + J_inv @ correction_term
-            # Re-insert a 0.0 value at index 4 so it matches the 6-element layout of self.observed_state
+        state_rate_reduced = dot_observed_state_reduced + J_inv @ correction_term
+        # Re-insert a 0.0 value at index 4 so it matches the 6-element layout of self.observed_state
 
-            state = np.insert(state_rate_reduced, s.VX, 0.0)
-            
-        else:
-            state = dot_observed_state + J_inv @ correction_term
+        state = np.insert(state_rate_reduced, 4, 0.0)
+
 
         self.observed_state += state * dt
 
-        #self.observed_state[4] = self.output[5]
+        self.observed_state[4] = self.output[5]
             
         st = self.state
         obs = self.observed_state
+
         self.counter+=1
         if self.counter % 100 == 0:
             self.get_logger().info(
