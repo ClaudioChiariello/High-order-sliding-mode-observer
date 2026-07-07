@@ -3,7 +3,7 @@ import os
 from ament_index_python.packages import get_package_share_directory 
 import pinocchio
 import numpy as np
-from observer.utils.states import obs_state as s
+from observer.utils.states import enum_obs_state as s
 import ctypes
 
 class robot:

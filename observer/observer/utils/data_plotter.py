@@ -1,8 +1,7 @@
 import matplotlib.pyplot as plt
 import os
 import numpy as np
-from observer.utils.states import obs_state as obs
-from observer.utils.states import outputs as out
+from observer.utils.states import enum_obs_state, enum_outputs
 
 class DataPlotter:
 
@@ -24,22 +23,22 @@ class DataPlotter:
         time = np.array(time_data)
 
         self.plot(time,
-            output[:, out.VX],
-            observed_out[:, out.VX], ylabel="vx [m/s]", filename="forward_vel.png"
+            output[:, enum_outputs.VX],
+            observed_out[:, enum_outputs.VX], ylabel="vx [m/s]", filename="forward_vel.png"
         )
 
         self.plot(
             time,
-            output[:, out.ACC_Y],
-            observed_out[:, out.ACC_Y],
+            output[:, enum_outputs.ACC_Y],
+            observed_out[:, enum_outputs.ACC_Y],
             ylabel="ay [m/s^2]",
             filename="LAteral_ACC.png"
         )
 
         self.plot(
             time,
-            state[:, obs.VY],
-            observed_state[:, obs.VY],
+            state[:, enum_obs_state.VY],
+            observed_state[:, enum_obs_state.VY],
             ylabel="vy [m/s]",
             filename="Lateral_vel.png"
         )
@@ -47,32 +46,32 @@ class DataPlotter:
 
         self.plot(
             time,
-            output[:, out.WZ],
-            observed_out[:, out.WZ],
+            output[:, enum_outputs.WZ],
+            observed_out[:, enum_outputs.WZ],
             ylabel="wz [rad/s]",
             filename="angular_vel_z.png"
         )
 
         self.plot(
             time,
-            output[:, out.DOT_WX],
-            observed_out[:, out.DOT_WX],
+            output[:, enum_outputs.DOT_WX],
+            observed_out[:, enum_outputs.DOT_WX],
             ylabel="dot_WX [rad/s^2]",
             filename="dot_Wx.png"
         )
 
         self.plot(
             time,
-            state[:, obs.WX],
-            observed_state[:, obs.WX],
+            state[:, enum_obs_state.WX],
+            observed_state[:, enum_obs_state.WX],
             ylabel="WX [rad/s]",
             filename="WX.png"
         )
 
         self.plot(
             time,
-            output[:, out.ROLL],
-            observed_out[:, out.ROLL],
+            output[:, enum_outputs.ROLL],
+            observed_out[:, enum_outputs.ROLL],
             ylabel="phi_tot [rad]",
             filename="phi_tot.png"
         )

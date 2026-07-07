@@ -13,8 +13,7 @@ from .gazebo_model import GazeboCallback
 from observer import robot
 from observer.utils.data_plotter import DataPlotter
 
-from observer.utils.states import obs_state as s
-from observer.utils.states import outputs as out
+from observer.utils.states import enum_obs_state, enum_outputs
 
 from geometry_msgs.msg import Twist
 
@@ -31,7 +30,7 @@ class TruckStateObserver(Node):
     def __init__(self):
         super().__init__('truck_state_observer')
 
-        self.group = ReentrantCallbackGroup()
+        self.parallel = ReentrantCallbackGroup()
 
         self.declare_parameter('scale_tanh', 10.0)
         self.scale_tanh = self.get_parameter('scale_tanh').value
@@ -49,15 +48,13 @@ class TruckStateObserver(Node):
         
         self.plotter = DataPlotter("results")
 
-        self.UseGazeboSim = False
         if self.get_parameter("use_sim_time").value:
-            self.fixed_dt = 1e-2 #lo rendi abbastanza basso da usare il tempo di gazebo
-            self.UseGazeboSim = True
+            self.fixed_dt = 1e-3 #lo rendi abbastanza basso da usare il tempo di gazebo
             
             self.timer_gazebo = self.create_timer(
                 self.fixed_dt, 
                 self.GazeboControl,
-                callback_group=self.group
+                callback_group=self.parallel
             )
 
             self.gz_pub_ = self.create_publisher(
@@ -71,7 +68,7 @@ class TruckStateObserver(Node):
                 '/imu/data', #50Hz
                 self.Gazebo.imu_callback,
                 qos_profile_sensor_data,
-                callback_group=self.group
+                callback_group=self.parallel
             )
 
             self.odom_sub = self.create_subscription(
@@ -79,7 +76,7 @@ class TruckStateObserver(Node):
                 '/odometry', #20Hz
                 self.Gazebo.odom_callback,
                 qos_profile_sensor_data,
-                callback_group=self.group
+                callback_group=self.parallel
             )
         else:
             self.fixed_dt = 1e-2 #The observer should run at 10ms
@@ -112,7 +109,7 @@ class TruckStateObserver(Node):
         self.timer_observer = self.create_timer(
             self.fixed_dt, 
             self.ModelSimulator,
-            callback_group=self.group
+            #callback_group=self.group
         )
 
         self.counter = 0
@@ -125,7 +122,7 @@ class TruckStateObserver(Node):
         self.sim_time = 0.0
 
 
-        self.previous_time = 0.0
+        self.previous_time = None
         self.jacobian_reduced = False
         self.w = np.zeros(5, dtype=np.float64)
 
@@ -136,20 +133,13 @@ class TruckStateObserver(Node):
         msg.linear.x = self.des_vel_x
         msg.linear.y = 0.0
         msg.angular.z = self.des_omega_z
-
+        
         self.gz_pub_.publish(msg)
 
 
     def ModelSimulator(self):
-        # now = self.get_clock().now().nanoseconds * 1e-9
-
-        # if self.previous_time == 0.0:
-        #     self.previous_time = now
-        #     return
-
-        # dt = now - self.previous_time
-        # self.previous_time = now
-        # print(dt)
+        
+        #self.print_time()
 
         dt = self.fixed_dt
         u = self.PdController(dt = dt)
@@ -157,7 +147,14 @@ class TruckStateObserver(Node):
 
         dot_observed_state = None
 
-        if(not self.UseGazeboSim):
+        if self.get_parameter("use_sim_time").value:
+
+            state, output = self.Gazebo.get_state_output()
+
+            self.state = state.copy()
+            self.output = output.copy()
+
+        else:
 
             dot_x, J_x, h_meas, _ = self.truck.calculate_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
             
@@ -165,24 +162,16 @@ class TruckStateObserver(Node):
 
             self.output = h_meas
 
-        else:
-
-            state, output = self.Gazebo.get_state_output()
-
-            self.state = state.copy()
-            self.output = output.copy()
-
         dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz, False, dt+self.sim_time)
 
         # Remove the row of the Jacobian corresponding to h(x_6) = vx
-        matrix_reduced = np.delete(J_h, out.VX, axis=0)
-        matrix_reduced = np.delete(matrix_reduced, s.VX, axis=1)
+        matrix_reduced = np.delete(J_h, enum_outputs.VX, axis=0)
+        matrix_reduced = np.delete(matrix_reduced, enum_obs_state.VX, axis=1)
         self.jacobian = matrix_reduced
         self.observed_output = h_hat_meas
 
         self.JacobianObserver(dot_observed_state, dt)   
         
-
         self.sim_time += dt
         self.time_data.append(self.sim_time)
         self.state_data.append(self.state.copy())
@@ -192,16 +181,19 @@ class TruckStateObserver(Node):
 
    
     def JacobianObserver(self, dot_observed_state, dt):
-        #print(self.jacobian, "\n\n")
         
         J_inv = np.linalg.inv(self.jacobian)
-        # print(J_inv, "\n\n")
-        alpha = 50
 
-        beta = 1.5
+        # alpha = 50
+        # beta = 1.5
+
+        alpha = 0.0001
+        beta = 0.00005
+
 
         estimated_error = self.output - self.observed_output
         estimated_error = estimated_error[:5]
+
         #estimated_error[out.DOT_WX] = estimated_error[out.WX]
 
         root_abs_error = np.sqrt(np.abs(estimated_error))
@@ -217,13 +209,12 @@ class TruckStateObserver(Node):
         correction_term = alpha * root_abs_error * sign_error + self.w
 
         #Remove the 5th elements
-        dot_observed_state_reduced = np.delete(dot_observed_state, s.VX)
+        dot_observed_state_reduced = np.delete(dot_observed_state, enum_obs_state.VX)
 
         state_rate_reduced = dot_observed_state_reduced + J_inv @ correction_term
         # Re-insert a 0.0 value at index 4 so it matches the 6-element layout of self.observed_state
 
         state = np.insert(state_rate_reduced, 4, 0.0)
-
 
         self.observed_state += state * dt
 
@@ -233,28 +224,18 @@ class TruckStateObserver(Node):
         obs = self.observed_state
 
         self.counter+=1
-        if self.counter % 100 == 0:
+        if self.counter % (1/self.fixed_dt) == 0:
             self.get_logger().info(
             f"real (estimated)\n"
-            f"Ang : r={st[s.ROLL]:7.3f} ({obs[s.ROLL]:7.3f})\n "
-            f"Vel : vx={st[s.VX]:7.3f} ({obs[s.VX]:7.3f}) "
-            f"vy={st[s.VY]:7.3f} ({obs[s.VY]:7.3f})\n"
-            f"Rate: wx={st[s.WX]:7.3f} ({obs[s.WX]:7.3f})  "
-            f"wz={st[s.WZ]:7.3f} ({obs[s.WZ]:7.3f})\n"
+            f"Ang : r={st[enum_obs_state.ROLL]:7.3f} ({obs[enum_obs_state.ROLL]:7.3f})\n "
+            f"Vel : vx={st[enum_obs_state.VX]:7.3f} ({obs[enum_obs_state.VX]:7.3f}) "
+            f"vy={st[enum_obs_state.VY]:7.3f} ({obs[enum_obs_state.VY]:7.3f})\n"
+            f"Rate: wx={st[enum_obs_state.WX]:7.3f} ({obs[enum_obs_state.WX]:7.3f})  "
+            f"wz={st[enum_obs_state.WZ]:7.3f} ({obs[enum_obs_state.WZ]:7.3f})\n"
             f"dt={dt:.4f}"
         )
 
     def PdController(self, dt):
-
-        # if(not self.UseGazeboSim):
-        #     roll = self.state[s.ROLL]
-        #     pitch = 0.0
-        #     yaw = self.state[s.YAW]
-
-        #     self.rotation_body2world = R.from_euler(
-        #         'xyz',
-        #         [roll, pitch, yaw]
-        #     ).as_matrix().T
 
         Kp = np.array([100000, 2000000])
         Ki = np.array([100, 100.0])
@@ -263,8 +244,8 @@ class TruckStateObserver(Node):
         vx_des, _, des_omega_z =  np.array([self.des_vel_x, 0, self.des_omega_z])
         
         control_error = np.array([
-            vx_des - self.state[s.VX],
-            des_omega_z - self.state[s.WZ]
+            vx_des - self.state[enum_obs_state.VX],
+            des_omega_z - self.state[enum_obs_state.WZ]
         ])
 
         derivative_term = Kd*((control_error - self.previous_e)/dt)
@@ -291,14 +272,35 @@ class TruckStateObserver(Node):
                             self.observed_state_data[:n], self.observed_output_data[:n], self.time_data[:n])
 
 
+
+    def print_time(self):
+
+        now = self.get_clock().now()
+
+        if self.previous_time is None:
+
+            self.previous_time = now
+
+            return
+        
+        dt = (now - self.previous_time).nanoseconds * 1e-9
+
+        self.previous_time = now
+
+        print(dt)
+
+
 def main(args=None):
 
     rclpy.init(args=args)
+    """Attenzione, perché con il MultiThreadExecutor i tempi delle chiamate delle callback per qualche motivo non sono più rispettati"""
+    use_multiThread = False
 
     node = TruckStateObserver()
+
     try:
-        if node.UseGazeboSim:
-            executor = rclpy.executors.MultiThreadedExecutor()
+        if use_multiThread:
+            executor = rclpy.executors.MultiThreadedExecutor(num_threads=4)
             executor.add_node(node)
             executor.spin()  # Handled by the outer try-except now
         else:
@@ -310,7 +312,7 @@ def main(args=None):
         
     finally:
         # Clean up the executor if it was initialized
-        if node.UseGazeboSim and 'executor' in locals():
+        if use_multiThread and 'executor' in locals():
             executor.shutdown()
             
         # Run your custom end routine and destroy the node

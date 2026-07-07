@@ -46,6 +46,7 @@ def generate_launch_description():
     controllers_to_spawn = ["joint_state_broadcaster", "traction_controller", "steering_controller"]
     
     nodes = []
+
     for controller in controllers_to_spawn:
         nodes.append(
             Node(
@@ -55,6 +56,7 @@ def generate_launch_description():
                 output="both",
             )
     )
+        
     nodes.append(
         Node(
             package="robot_state_publisher",
@@ -66,6 +68,7 @@ def generate_launch_description():
         ),
     
     )
+    
     nodes.append(
         Node(
             package='truck_control',

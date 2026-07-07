@@ -3,8 +3,7 @@ from nav_msgs.msg import Odometry
 from tf2_msgs.msg import TFMessage
 from tf_transformations import euler_from_quaternion, quaternion_matrix
 
-from observer.utils.states import obs_state as s
-from observer.utils.states import outputs as out
+from observer.utils.states import enum_obs_state, enum_outputs
 
 import numpy as np
 
@@ -25,10 +24,10 @@ class GazeboCallback:
 
     def __init__(self, node):
         self.node = node
-        self.imu_received = False
-        self.odom_received = False
+
         num_states = 6
         num_outputs = 6 
+
         self.gazebo_state = np.zeros(num_states, dtype='float32')
         self.gazebo_output = np.zeros(num_outputs, dtype='float32')
         
@@ -45,14 +44,7 @@ class GazeboCallback:
     #Called every 20ms (50Hz) 
     def imu_callback(self, msg):
         
-        now = self.node.get_clock().now().nanoseconds * 1e-9
-
-        if self.previous_time == 0.0:
-            self.previous_time = now
-            return
-
-        dt = now - self.previous_time
-        self.previous_time = now
+        #self.node.print_time()
 
         q = [
             msg.orientation.x,
@@ -61,37 +53,30 @@ class GazeboCallback:
             msg.orientation.w
         ]
         roll, _, _ = euler_from_quaternion(q)
-
-        if(self.node.UseGazeboSim):
-            self.node.rotation_body2world = quaternion_matrix(q)[:3, :3].T
       
         with self.lock:
 
-            self.gazebo_state[s.ROLL] = roll
-            self.gazebo_output[out.ROLL] = roll
+            self.gazebo_state[enum_obs_state.ROLL] = roll
+            self.gazebo_output[enum_outputs.ROLL] = roll
 
-            self.gazebo_state[s.WX] = msg.angular_velocity.x
-            self.gazebo_output[out.WX] = msg.angular_velocity.x
+            self.gazebo_state[enum_obs_state.WX] = msg.angular_velocity.x
+            self.gazebo_output[enum_outputs.WX] = msg.angular_velocity.x
 
-            self.gazebo_state[s.WZ] = msg.angular_velocity.z
-            self.gazebo_output[out.WZ] = msg.angular_velocity.z
+            self.gazebo_state[enum_obs_state.WZ] = msg.angular_velocity.z
+            self.gazebo_output[enum_outputs.WZ] = msg.angular_velocity.z
 
-            self.gazebo_output[out.ACC_Y] = msg.linear_acceleration.y
+            self.gazebo_output[enum_outputs.ACC_Y] = msg.linear_acceleration.y
 
-        self.imu_received = True
 
     #Called every 50ms (20Hz) 
     def odom_callback(self, odom_msg):
-
+        
         with self.lock:
 
-            self.gazebo_state[s.VX] = odom_msg.twist.twist.linear.x
+            self.gazebo_state[enum_obs_state.VX] = odom_msg.twist.twist.linear.x
 
-            self.gazebo_output[out.VX] = odom_msg.twist.twist.linear.x
+            self.gazebo_state[enum_obs_state.VY] =  odom_msg.twist.twist.linear.y
 
-            self.gazebo_state[s.VY] =  odom_msg.twist.twist.linear.y
-
-        self.odom_received = True
 
 
     def get_state_output(self):
@@ -128,44 +113,4 @@ class GazeboCallback:
         return T @ np.array([p, q, r])
 
 
-# def tf_callback(self, msg):
-
-#     for t in msg.transforms:
-
-#         if t.child_frame_id == "base_link":
-
-#             x = t.transform.translation.x
-#             y = t.transform.translation.y
-
-#             self.get_logger().info(
-#                 f"TF base_link: {x:.2f}, {y:.2f}"
-#             )
-
-
-# def joint_callback(self, msg):
-
-#     # Example:
-#     # left_rot_joint_a1 velocity
-#     if "left_rot_joint_a1" in msg.name:
-
-#         idx = msg.name.index("left_rot_joint_a1")
-
-#         velocity = msg.velocity[idx]
-#         position = msg.position[idx]
-
-#         self.get_logger().info(
-#             f"Wheel velocity: {velocity:.3f} rad/s "
-#             f"position: {position:.3f}"
-#         )
-
-
-#     # steering
-#     if "left_steer_joint_a1" in msg.name:
-
-#         idx = msg.name.index("left_steer_joint_a1")
-
-#         steering_angle = msg.position[idx]
-
-#         self.get_logger().info(
-#             f"Steering angle: {steering_angle:.3f} rad"
-#         )
+ 
