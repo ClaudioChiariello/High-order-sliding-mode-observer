@@ -7,6 +7,8 @@ from observer.utils.states import enum_obs_state as s
 import ctypes
 
 class robot:
+
+
     def __init__(self):
         
         urdf_path = os.path.join(
@@ -14,17 +16,20 @@ class robot:
             'urdf',
             'truck.urdf'
         )
+
         self.model = pinocchio.buildModelFromUrdf(
             urdf_path
         )
 
         self.data = self.model.createData()
+
+        self.q = pinocchio.neutral(self.model)
+
         # Robot configuration
         dq = pinocchio.utils.zero(self.model.nv)  # joint velocities
-        self.mass, self.Ix, self.Iz = self.get_mass_properties()
-        self.L = 0
-        self.delta = 0
 
+        self.mass, self.Ix, self.Iz = self.get_mass_properties()
+ 
         self.phi = np.float32(0.0)
         lib_path = os.path.join("/home/user/ros2_ws/src/observer/matlab/codegen/lib/vehicle_dynamics_numeric", 'libvehicle_dynamics.so')
         self.lib = ctypes.CDLL(lib_path)
@@ -38,6 +43,8 @@ class robot:
             ctypes.POINTER(ctypes.c_double), # h_num output (6x1)
             ctypes.POINTER(ctypes.c_double)  # J_h_num output (6x6 -> 36 flat)
         ]
+
+
 
     def get_mass_properties(self):
         """
@@ -109,11 +116,6 @@ class robot:
         return total_mass, Ix, Iz
 
 
-    def getFurtherParameterFromUrdf(self, L, delta):
-         self.L = L
-         self.delta = delta
-
-
 
     def calculate_dynamics(self, state, Fx, Mz, use_dist, dt):
             """Wrapper to safely feed numpy arrays straight into the raw C memory blocks."""
@@ -143,6 +145,51 @@ class robot:
             
             # Reshape flat 1D output buffers back into proper 2D matrices
             return dot_x, J_x.reshape((6, 6), order='F'), h, J_h.reshape((6, 6), order='F') 
+
+
+    def computeJacobian(self):
+        
+        pinocchio.forwardKinematics(
+            self.model,
+            self.data,
+            self.q
+        )
+ 
+        pinocchio.computeJointJacobians(self.model, self.data, self.q)
+        
+        pinocchio.updateFramePlacements(
+            self.model,
+            self.data
+        )
+
+        frame_name = "left_wheel_axis4_1"
+        frame_id = self.model.getFrameId(frame_name)
+        #print(self.q)
+
+        J = pinocchio.computeFrameJacobian(
+            self.model,
+            self.data,
+            self.q,
+            frame_id,
+            pinocchio.ReferenceFrame.LOCAL_WORLD_ALIGNED
+        )
+
+        print(J)
+
+
+    def joint_states_callback(self, joint_msg):
+
+        for name, position in zip(joint_msg.name, joint_msg.position):
+            joint_id = self.model.getJointId(name)
+
+            if joint_id == 0:
+                continue
+
+            idx_q = self.model.joints[joint_id].idx_q
+
+            self.q[idx_q] = position
+        
+ 
 
     def dynamics(self, state, Fx, Mz, add_disturb):
         """

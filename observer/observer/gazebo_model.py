@@ -78,7 +78,7 @@ class GazeboCallback:
             self.gazebo_state[enum_obs_state.VY] =  odom_msg.twist.twist.linear.y
 
 
-
+  
     def get_state_output(self):
 
         with self.lock:
@@ -112,5 +112,3 @@ class GazeboCallback:
 
         return T @ np.array([p, q, r])
 
-
- 

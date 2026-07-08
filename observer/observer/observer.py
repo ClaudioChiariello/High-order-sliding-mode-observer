@@ -23,7 +23,7 @@ from std_msgs.msg import Float64MultiArray
 from rcl_interfaces.srv import GetParameters
 
 from rclpy.qos import qos_profile_sensor_data
-
+from sensor_msgs.msg import JointState
 
 class TruckStateObserver(Node):
 
@@ -61,6 +61,14 @@ class TruckStateObserver(Node):
                 Twist,
                 '/cmd_vel',
                 10
+            )
+
+            self.joint_sub = self.create_subscription(
+                JointState,
+                '/joint_states',
+                self.truck.joint_states_callback,
+                qos_profile_sensor_data,
+                callback_group=self.parallel
             )
 
             self.imu_sub = self.create_subscription(
@@ -140,6 +148,8 @@ class TruckStateObserver(Node):
     def ModelSimulator(self):
         
         #self.print_time()
+
+        self.truck.computeJacobian()
 
         dt = self.fixed_dt
         u = self.PdController(dt = dt)
