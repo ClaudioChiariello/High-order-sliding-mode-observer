@@ -174,7 +174,7 @@ class robot:
             pinocchio.ReferenceFrame.LOCAL_WORLD_ALIGNED
         )
 
-        print(J)
+
 
 
     def joint_states_callback(self, joint_msg):

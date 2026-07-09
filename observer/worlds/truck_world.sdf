@@ -30,10 +30,8 @@
       filename="gz-sim-forcetorque-system"
       name="gz::sim::systems::ForceTorque">
     </plugin>
-    <!-- <plugin
-      filename="gz-sim-link-wrench-publisher-system"
-      name="gz::sim::systems::LinkWrenchPublisher">
-    </plugin> -->
+    <plugin filename="libcontact_plugin.so"  name="ContactPrinter"/>
+ 
 
     <light type="directional" name="sun">
         <cast_shadows>true</cast_shadows>

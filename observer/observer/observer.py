@@ -95,22 +95,27 @@ class TruckStateObserver(Node):
         num_states = 6
         num_outputs = 6
 
-        # State terms
+        # MODEL terms
         self.state = np.zeros(num_states, dtype=np.float64)
 
         self.output = np.zeros(num_outputs, dtype="float32")
 
-        # Observer terms
-        self.observed_state = np.zeros(num_states, dtype="float32")
+        # OBSERVER terms
+        self.observed_state = np.zeros(num_states, dtype=np.float64)
 
         self.observed_output = np.zeros(num_outputs, dtype="float32")
-        
+
+        # GAZEBO terms
+        self.gazebo_state = np.zeros(num_states, dtype=np.float64)
+
+        self.gazebo_output = np.zeros(num_outputs, dtype="float32")
+
+
         # Jacobian of the output vector field
         self.jacobian = np.zeros((num_outputs, num_states), dtype='float32')
 
         # PID Terms
         self.e_int = np.zeros(2,dtype="float32")
-        
         self.previous_e = np.zeros(2,dtype="float32")
 
         # The controller frequency will always depend on this, and so the observer if it runs in the callback
@@ -127,6 +132,8 @@ class TruckStateObserver(Node):
         self.state_data = []
         self.observed_state_data = []
         self.observed_output_data = []
+        self.gazebo_state_data = []
+        self.gazebo_output_data = []
         self.sim_time = 0.0
 
 
@@ -149,10 +156,10 @@ class TruckStateObserver(Node):
         
         #self.print_time()
 
-        self.truck.computeJacobian()
+        #self.truck.computeJacobian()
 
         dt = self.fixed_dt
-        u = self.PdController(dt = dt)
+        u = self.PdController(dt, self.state)
         Fx, Mz = u
 
         dot_observed_state = None
@@ -161,20 +168,24 @@ class TruckStateObserver(Node):
 
             state, output = self.Gazebo.get_state_output()
 
-            self.state = state.copy()
-            self.output = output.copy()
+            self.gazebo_state = state.copy()
+            self.gazebo_output = output.copy()
 
-        else:
+            self.gazebo_state_data.append(state.copy())
+            self.gazebo_output_data.append(output.copy())
 
-            dot_x, J_x, h_meas, _ = self.truck.calculate_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
-            
-            self.state += dot_x*dt
+        dot_x, J_x, h_meas, _ = self.truck.calculate_dynamics(self.state, Fx, Mz, False, dt+self.sim_time)
+        
+        self.state += dot_x*dt
+        self.output = h_meas
 
-            self.output = h_meas
+        self.state_data.append(self.state.copy())
+        self.output_data.append(self.output.copy())
+
 
         dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz, False, dt+self.sim_time)
 
-        # Remove the row of the Jacobian corresponding to h(x_6) = vx
+        #Remove the row of the Jacobian corresponding to h(x_6) = vx
         matrix_reduced = np.delete(J_h, enum_outputs.VX, axis=0)
         matrix_reduced = np.delete(matrix_reduced, enum_obs_state.VX, axis=1)
         self.jacobian = matrix_reduced
@@ -182,23 +193,23 @@ class TruckStateObserver(Node):
 
         self.JacobianObserver(dot_observed_state, dt)   
         
-        self.sim_time += dt
-        self.time_data.append(self.sim_time)
-        self.state_data.append(self.state.copy())
-        self.output_data.append(self.output.copy())
         self.observed_state_data.append(self.observed_state.copy())
         self.observed_output_data.append(self.observed_output.copy())
+
+        self.sim_time += dt
+        self.time_data.append(self.sim_time)
+
 
    
     def JacobianObserver(self, dot_observed_state, dt):
         
         J_inv = np.linalg.inv(self.jacobian)
 
-        # alpha = 50
-        # beta = 1.5
+        alpha = 50
+        beta = 1.5
 
-        alpha = 0.0001
-        beta = 0.00005
+        # alpha = 0.0001
+        # beta = 0.00005
 
 
         estimated_error = self.output - self.observed_output
@@ -245,7 +256,7 @@ class TruckStateObserver(Node):
             f"dt={dt:.4f}"
         )
 
-    def PdController(self, dt):
+    def PdController(self, dt, current_state):
 
         Kp = np.array([100000, 2000000])
         Ki = np.array([100, 100.0])
@@ -254,8 +265,8 @@ class TruckStateObserver(Node):
         vx_des, _, des_omega_z =  np.array([self.des_vel_x, 0, self.des_omega_z])
         
         control_error = np.array([
-            vx_des - self.state[enum_obs_state.VX],
-            des_omega_z - self.state[enum_obs_state.WZ]
+            vx_des - current_state[enum_obs_state.VX],
+            des_omega_z - current_state[enum_obs_state.WZ]
         ])
 
         derivative_term = Kd*((control_error - self.previous_e)/dt)
@@ -279,7 +290,9 @@ class TruckStateObserver(Node):
         )
 
         self.plotter.PlotAtEnd(self.state_data[:n],  self.output_data[:n],
-                            self.observed_state_data[:n], self.observed_output_data[:n], self.time_data[:n])
+                            self.observed_state_data[:n], self.observed_output_data[:n],
+                            self.gazebo_state_data[:n], self.gazebo_output_data[:n],
+                            self.time_data[:n])
 
 
 

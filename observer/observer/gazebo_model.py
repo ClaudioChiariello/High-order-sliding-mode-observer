@@ -74,7 +74,8 @@ class GazeboCallback:
         with self.lock:
 
             self.gazebo_state[enum_obs_state.VX] = odom_msg.twist.twist.linear.x
-
+            self.gazebo_output[enum_outputs.VX] = odom_msg.twist.twist.linear.x
+            
             self.gazebo_state[enum_obs_state.VY] =  odom_msg.twist.twist.linear.y
 
 
