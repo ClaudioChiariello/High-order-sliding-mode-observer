@@ -38,7 +38,7 @@ class TruckStateObserver(Node):
         self.declare_parameter("des_vel_x", 5.0)
         self.des_vel_x = self.get_parameter('des_vel_x').value
 
-        self.declare_parameter("des_omega_z", 0.5) #giving a desired angular vel prevent the velocity to reach a steady state
+        self.declare_parameter("des_omega_z", 0.4) #giving a desired angular vel prevent the velocity to reach a steady state
         self.des_omega_z = self.get_parameter('des_omega_z').value
         
         # Friend Function 
@@ -97,17 +97,14 @@ class TruckStateObserver(Node):
 
         # MODEL terms
         self.state = np.zeros(num_states, dtype=np.float64)
-
         self.output = np.zeros(num_outputs, dtype="float32")
 
         # OBSERVER terms
         self.observed_state = np.zeros(num_states, dtype=np.float64)
-
         self.observed_output = np.zeros(num_outputs, dtype="float32")
 
         # GAZEBO terms
         self.gazebo_state = np.zeros(num_states, dtype=np.float64)
-
         self.gazebo_output = np.zeros(num_outputs, dtype="float32")
 
 
@@ -136,7 +133,6 @@ class TruckStateObserver(Node):
         self.gazebo_output_data = []
         self.sim_time = 0.0
 
-
         self.previous_time = None
         self.jacobian_reduced = False
         self.w = np.zeros(5, dtype=np.float64)
@@ -159,7 +155,7 @@ class TruckStateObserver(Node):
         #self.truck.computeJacobian()
 
         dt = self.fixed_dt
-        u = self.PdController(dt, self.state)
+        u = self.PdController(self.state, dt)
         Fx, Mz = u
 
         dot_observed_state = None
@@ -173,8 +169,9 @@ class TruckStateObserver(Node):
 
             self.gazebo_state_data.append(state.copy())
             self.gazebo_output_data.append(output.copy())
-
-        dot_x, J_x, h_meas, _ = self.truck.calculate_dynamics(self.state, Fx, Mz, False, dt+self.sim_time)
+        
+        # Model Dynamic
+        dot_x, J_x, h_meas, _ = self.truck.calculate_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
         
         self.state += dot_x*dt
         self.output = h_meas
@@ -182,7 +179,7 @@ class TruckStateObserver(Node):
         self.state_data.append(self.state.copy())
         self.output_data.append(self.output.copy())
 
-
+        # Observer's step
         dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz, False, dt+self.sim_time)
 
         #Remove the row of the Jacobian corresponding to h(x_6) = vx
@@ -195,6 +192,7 @@ class TruckStateObserver(Node):
         
         self.observed_state_data.append(self.observed_state.copy())
         self.observed_output_data.append(self.observed_output.copy())
+
 
         self.sim_time += dt
         self.time_data.append(self.sim_time)
@@ -256,7 +254,7 @@ class TruckStateObserver(Node):
             f"dt={dt:.4f}"
         )
 
-    def PdController(self, dt, current_state):
+    def PdController(self, current_state, dt):
 
         Kp = np.array([100000, 2000000])
         Ki = np.array([100, 100.0])

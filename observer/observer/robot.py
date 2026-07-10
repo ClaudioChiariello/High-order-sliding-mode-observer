@@ -140,7 +140,7 @@ class robot:
             )
 
             if(use_dist):
-                 dot_x[:s.VY] += np.sin(2*np.pi*0.5*dt)
+                 dot_x += 4*np.sin(2*np.pi*2*dt)
                  dot_x[-1] = 0.8*np.sin(2*np.pi*0.05*dt)
             
             # Reshape flat 1D output buffers back into proper 2D matrices
