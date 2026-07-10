@@ -137,6 +137,10 @@ class TruckStateObserver(Node):
         self.jacobian_reduced = False
         self.w = np.zeros(5, dtype=np.float64)
 
+        # Differentiator state
+        self.w_diff = np.float32(0.0)
+        self.w_diff_integral = np.float32(0.0)
+        self.dot_w_diff = np.float32(0.0) 
 
     def GazeboControl(self):
         msg = Twist()
@@ -171,7 +175,7 @@ class TruckStateObserver(Node):
             self.gazebo_output_data.append(output.copy())
         
         # Model Dynamic
-        dot_x, J_x, h_meas, _ = self.truck.calculate_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
+        dot_x, J_x, h_meas, _ = self.truck.calculate_real_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
         
         self.state += dot_x*dt
         self.output = h_meas
@@ -180,7 +184,7 @@ class TruckStateObserver(Node):
         self.output_data.append(self.output.copy())
 
         # Observer's step
-        dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz, False, dt+self.sim_time)
+        dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_obs_dynamics(self.observed_state, Fx, Mz)
 
         #Remove the row of the Jacobian corresponding to h(x_6) = vx
         matrix_reduced = np.delete(J_h, enum_outputs.VX, axis=0)
@@ -218,12 +222,13 @@ class TruckStateObserver(Node):
         root_abs_error = np.sqrt(np.abs(estimated_error))
 
         # 2. Overwrite just the specific indices using vectorized assignment
-        root_abs_error[2] = np.abs(estimated_error[2]) ** (2/3)
-        root_abs_error[3] = np.abs(estimated_error[2]) ** (1/3)
+        root_abs_error[enum_outputs.WX] = np.abs(estimated_error[enum_outputs.WX]) ** (2/3)
+        root_abs_error[enum_outputs.DOT_WX] = np.abs(estimated_error[enum_outputs.WX]) ** (1/3)
 
         sign_error = np.tanh(self.scale_tanh*estimated_error)
 
         self.w += beta*sign_error
+        self.w[enum_outputs.WX] = 0.0
         
         correction_term = alpha * root_abs_error * sign_error + self.w
 
@@ -238,7 +243,9 @@ class TruckStateObserver(Node):
         self.observed_state += state * dt
 
         self.observed_state[4] = self.output[5]
-            
+        
+        self.differentiatior()
+
         st = self.state
         obs = self.observed_state
 
@@ -251,8 +258,21 @@ class TruckStateObserver(Node):
             f"vy={st[enum_obs_state.VY]:7.3f} ({obs[enum_obs_state.VY]:7.3f})\n"
             f"Rate: wx={st[enum_obs_state.WX]:7.3f} ({obs[enum_obs_state.WX]:7.3f})  "
             f"wz={st[enum_obs_state.WZ]:7.3f} ({obs[enum_obs_state.WZ]:7.3f})\n"
+            f"w_diff={st[enum_obs_state.WX]:7.3f} ({self.w_diff_integral:7.3f})\n"
+
             f"dt={dt:.4f}"
         )
+
+
+    def differentiatior(self):
+
+        differentiator_error = self.output[enum_obs_state.WX] - self.w_diff
+
+        self.w_diff += (10 * np.sqrt(np.abs(differentiator_error)) * np.tanh(self.scale_tanh*differentiator_error) + self.w_diff_integral) * self.fixed_dt
+
+        self.w_diff_integral += (10 * np.tanh(self.scale_tanh*differentiator_error))*self.fixed_dt
+                
+
 
     def PdController(self, current_state, dt):
 

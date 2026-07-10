@@ -22,8 +22,8 @@ class DataPlotter:
         time = np.array(time_data)
         
         # Convert Gazebo datasets if they are provided
-        gz_state = np.array(gazebo_state) if len(gazebo_state) > 0 is not None else None
-        gz_out = np.array(gazebo_output) if len(gazebo_output) > 0 is not None else None
+        gz_state = np.array(gazebo_state) if len(gazebo_state) > 0 else None
+        gz_out = np.array(gazebo_output) if len(gazebo_output) > 0 else None
 
         # 1. Forward Velocity (VX)
         self.plot(
@@ -84,6 +84,16 @@ class DataPlotter:
             filename="phi_tot.png",
             gazebo=gz_out[:, enum_outputs.ROLL] if (show_gazebo and gz_out is not None) else None
         )
+
+        self.plot(
+            time,
+            output[:, enum_outputs.WX],
+            observed_out[:, enum_outputs.WX],
+            ylabel="wx [rad/s]",
+            filename="omega_x.png",
+            gazebo=gz_out[:, enum_outputs.ROLL] if (show_gazebo and gz_out is not None) else None
+        )
+
 
     def plot(self, time, real, observed, ylabel, filename, gazebo=None):
         plt.figure(figsize=(10, 6))

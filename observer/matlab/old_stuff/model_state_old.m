@@ -2,8 +2,6 @@ clear; clc;
 
 compile_with_dist = false;
 
-
-
 % 1. Initialize variables explicitly (Only what the observer tracks!)
 phi   = sym('phi', 'real');
 wx    = sym('wx', 'real');
@@ -22,7 +20,9 @@ Mz    = sym('Mz', 'real');
 % Pure 6-state Observer Vector
 state_obs = [phi; wx; vy; wz; vx; phi_u]; 
 % Physical Parameters
-m = 12809.162180730276; Ix = 4423.849628639999; Iz = 35308.58917090647; C_alpha = 300e2;
+m = 12809.162180730276; Ix = 4423.849628639999; Iz = 35308.58917090647;
+C_alpha = 350e2;
+
 %syms m Ix Iz C_alpha real
 Cr = 200000.0; Kr = 800000; g = -9.81;
 CoM_z = 2.0832863727326365;
@@ -62,7 +62,6 @@ tire_yaw_moment = (F_sat(1) * cos(delta_1) * L(1) + F_sat(2) * cos(delta_2) * L(
 % dist = (use_dist == 1) * 5;
 % dphi_u = (use_dist == 1) * sin(2*pi*70);
 
-dphi_u = 0;
 dist = 0;
 
 total_len = L(1) + L(4); %tot len
@@ -83,6 +82,8 @@ dvy = -vx * wz + (F_lateral_total) / m;
 dot_wx = (m * (-vx * wz + (F_lateral_total) / m) * h_com + m * g * sin(phi) - Cr * wx - Kr * (phi - phi_u)) / Ix + dist;
 dot_wz = (Mz + tire_yaw_moment) / Iz;
 dphi = wx;
+dphi_u = 0;
+
 
 % Remapped State Derivative Vector (6x1 matching state_obs layout)
 dot_x = [dphi; dot_wx; dvy; dot_wz; dvx; dphi_u];
@@ -96,7 +97,8 @@ transport_term = cross(dot_omega, distance_from_CoM) + cross(omega, cross(omega,
 acc_y_measured = dvy - transport_term(2); 
 
 
-acc_y_measured = acc_y_measured - vx*wz 
+acc_y_measured = acc_y_measured + vx*wz;
+
 h = [phi; acc_y_measured; wx; dot_wx; wz; vx];
 
 % 4. Calculate Analytical Jacobians with respect to ONLY state_obs
