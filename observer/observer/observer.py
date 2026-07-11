@@ -10,9 +10,8 @@ import tf2_ros
 from tf_transformations import quaternion_matrix
 
 from .gazebo_model import GazeboCallback
-from observer import robot
+from observer.model import dynamic_model 
 from observer.utils.data_plotter import DataPlotter
-
 from observer.utils.states import enum_obs_state, enum_outputs
 
 from geometry_msgs.msg import Twist
@@ -42,7 +41,7 @@ class TruckStateObserver(Node):
         self.des_omega_z = self.get_parameter('des_omega_z').value
         
         # Friend Function 
-        self.truck = robot.robot()
+        self.truck = dynamic_model.DynamicModel()
         
         self.Gazebo = GazeboCallback(self)
         
@@ -88,9 +87,6 @@ class TruckStateObserver(Node):
             )
         else:
             self.fixed_dt = 1e-2 #The observer should run at 10ms
-
-        self.delta = np.zeros(2, dtype='float32')
-        self.rotation_body2world = np.zeros((3,3), dtype='float32')
         
         num_states = 6
         num_outputs = 6
@@ -110,10 +106,6 @@ class TruckStateObserver(Node):
 
         # Jacobian of the output vector field
         self.jacobian = np.zeros((num_outputs, num_states), dtype='float32')
-
-        # PID Terms
-        self.e_int = np.zeros(2,dtype="float32")
-        self.previous_e = np.zeros(2,dtype="float32")
 
         # The controller frequency will always depend on this, and so the observer if it runs in the callback
         self.timer_observer = self.create_timer(
@@ -138,9 +130,8 @@ class TruckStateObserver(Node):
         self.w = np.zeros(5, dtype=np.float64)
 
         # Differentiator state
-        self.w_diff = np.float32(0.0)
-        self.w_diff_integral = np.float32(0.0)
-        self.dot_w_diff = np.float32(0.0) 
+        self.omega_x_obs = np.float32(0.0)
+        self.dot_omega_x_obs = np.float32(0.0) 
 
     def GazeboControl(self):
         msg = Twist()
@@ -159,10 +150,6 @@ class TruckStateObserver(Node):
         #self.truck.computeJacobian()
 
         dt = self.fixed_dt
-        u = self.PdController(self.state, dt)
-        Fx, Mz = u
-
-        dot_observed_state = None
 
         if self.get_parameter("use_sim_time").value:
 
@@ -174,7 +161,11 @@ class TruckStateObserver(Node):
             self.gazebo_state_data.append(state.copy())
             self.gazebo_output_data.append(output.copy())
         
+
         # Model Dynamic
+        u = self.truck.PdController(self.state, self.des_vel_x, self.des_omega_z, dt)
+        Fx, Mz = u
+
         dot_x, J_x, h_meas, _ = self.truck.calculate_real_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
         
         self.state += dot_x*dt
@@ -183,17 +174,23 @@ class TruckStateObserver(Node):
         self.state_data.append(self.state.copy())
         self.output_data.append(self.output.copy())
 
-        # Observer's step
+
+        # Observer's Dynamic
+        u = self.truck.PdController(self.observed_state, self.des_vel_x, self.des_omega_z, dt)
+        Fx, Mz = u
+
         dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_obs_dynamics(self.observed_state, Fx, Mz)
 
         #Remove the row of the Jacobian corresponding to h(x_6) = vx
         matrix_reduced = np.delete(J_h, enum_outputs.VX, axis=0)
         matrix_reduced = np.delete(matrix_reduced, enum_obs_state.VX, axis=1)
         self.jacobian = matrix_reduced
-        self.observed_output = h_hat_meas
+        # Compute Jacobian correction
+        self.JacobianObserver(dot_observed_state, self.output.copy(), dt)   
 
-        self.JacobianObserver(dot_observed_state, dt)   
-        
+        self.observed_output = h_hat_meas
+        self.observed_output[enum_outputs.DOT_WX] = self.dot_omega_x_obs
+
         self.observed_state_data.append(self.observed_state.copy())
         self.observed_output_data.append(self.observed_output.copy())
 
@@ -203,7 +200,7 @@ class TruckStateObserver(Node):
 
 
    
-    def JacobianObserver(self, dot_observed_state, dt):
+    def JacobianObserver(self, dot_observed_state, real_output, dt):
         
         J_inv = np.linalg.inv(self.jacobian)
 
@@ -214,7 +211,7 @@ class TruckStateObserver(Node):
         # beta = 0.00005
 
 
-        estimated_error = self.output - self.observed_output
+        estimated_error = real_output - self.observed_output
         estimated_error = estimated_error[:5]
 
         #estimated_error[out.DOT_WX] = estimated_error[out.WX]
@@ -242,9 +239,9 @@ class TruckStateObserver(Node):
 
         self.observed_state += state * dt
 
-        self.observed_state[4] = self.output[5]
+        self.observed_state[4] = real_output[5]
         
-        self.differentiatior()
+        self.LevantDifferentiatior(dot_observed_state[enum_obs_state.WX], real_output, dt)
 
         st = self.state
         obs = self.observed_state
@@ -258,45 +255,35 @@ class TruckStateObserver(Node):
             f"vy={st[enum_obs_state.VY]:7.3f} ({obs[enum_obs_state.VY]:7.3f})\n"
             f"Rate: wx={st[enum_obs_state.WX]:7.3f} ({obs[enum_obs_state.WX]:7.3f})  "
             f"wz={st[enum_obs_state.WZ]:7.3f} ({obs[enum_obs_state.WZ]:7.3f})\n"
-            f"w_diff={st[enum_obs_state.WX]:7.3f} ({self.w_diff_integral:7.3f})\n"
+            f"dot_WX={real_output[enum_outputs.DOT_WX]:7.3f} ({self.dot_omega_x_obs:7.3f})\n"
+            f"differentiator_wx={real_output[enum_outputs.WX]:7.3f} ({self.omega_x_obs:7.3f})\n"
 
             f"dt={dt:.4f}"
         )
 
 
-    def differentiatior(self):
+    """To copute the transportation term I correctly need an estimation of dot_omega"""
+    def LevantDifferentiatior(self, dot_wx, real_output, dt):
 
-        differentiator_error = self.output[enum_obs_state.WX] - self.w_diff
+        error = self.omega_x_obs - real_output[enum_outputs.WX]
 
-        self.w_diff += (10 * np.sqrt(np.abs(differentiator_error)) * np.tanh(self.scale_tanh*differentiator_error) + self.w_diff_integral) * self.fixed_dt
+        # gains
+        lambda1 = 50.0 
+        #lambda2 = 400.0 # for dist of 2.5 Hz, otherwise 50
+        lambda2 = 450.0 # for dist of 1.5 Hz 
 
-        self.w_diff_integral += (10 * np.tanh(self.scale_tanh*differentiator_error))*self.fixed_dt
-                
+        # smooth sign (replace with np.sign if chattering is acceptable)
+        s = np.tanh(self.scale_tanh * error)
+
+        # observer equations
+        omega_hat_dot = self.dot_omega_x_obs - lambda1 * np.sqrt(np.abs(error)) * s
+        dot_omega_hat_dot = -lambda2 * s
+
+        # integrate
+        self.omega_x_obs += omega_hat_dot * dt
+        self.dot_omega_x_obs += dot_omega_hat_dot * dt
 
 
-    def PdController(self, current_state, dt):
-
-        Kp = np.array([100000, 2000000])
-        Ki = np.array([100, 100.0])
-        Kd = np.array([100, 10])
-
-        vx_des, _, des_omega_z =  np.array([self.des_vel_x, 0, self.des_omega_z])
-        
-        control_error = np.array([
-            vx_des - current_state[enum_obs_state.VX],
-            des_omega_z - current_state[enum_obs_state.WZ]
-        ])
-
-        derivative_term = Kd*((control_error - self.previous_e)/dt)
-        integral_term = Ki*self.e_int
-
-        u = Kp*control_error + integral_term  
-    
-        self.previous_e = control_error
-        self.e_int += control_error*dt
-
-        return u
-    
 
     def AtEnd(self):
         # Perché i vari thread potrebbero non restare sincronizzati

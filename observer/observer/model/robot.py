@@ -4,7 +4,6 @@ from ament_index_python.packages import get_package_share_directory
 import pinocchio
 import numpy as np
 from observer.utils.states import enum_obs_state as s
-import ctypes
 
 class robot:
 
@@ -31,34 +30,6 @@ class robot:
         self.mass, self.Ix, self.Iz = self.get_mass_properties()
  
         self.phi = np.float32(0.0)
-
-        lib_path_real = os.path.join("/home/user/ros2_ws/src/observer/matlab/codegen/lib/vehicle_dynamics_real", 'libvehicle_dynamics_real.so')
-
-        lib_path_obs = os.path.join("/home/user/ros2_ws/src/observer/matlab/codegen/lib/vehicle_dynamics_obs", 'libvehicle_dynamics_obs.so')
-        
-        self.lib_real_model = ctypes.CDLL(lib_path_real)
-        self.lib_obs_model = ctypes.CDLL(lib_path_obs)
-
-        self.lib_real_model.vehicle_dynamics_real.argtypes = [
-            ctypes.POINTER(ctypes.c_double), # real_state (6x1)
-            ctypes.c_double,                 # Fx (scalar)
-            ctypes.c_double,                 # Mz (scalar)
-            ctypes.POINTER(ctypes.c_double), # dot_x_real output (6x1)
-            ctypes.POINTER(ctypes.c_double), # J_x_num output (6x6 -> 36 flat)
-            ctypes.POINTER(ctypes.c_double), # h_num output (6x1)
-            ctypes.POINTER(ctypes.c_double)  # J_h_num output (6x6 -> 36 flat)
-        ]
-
-        self.lib_obs_model.vehicle_dynamics_obs.argtypes = [
-            ctypes.POINTER(ctypes.c_double), # state_obs (6x1)
-            ctypes.c_double,                 # Fx (scalar)
-            ctypes.c_double,                 # Mz (scalar)
-            ctypes.POINTER(ctypes.c_double), # dot_x_obs output (6x1)
-            ctypes.POINTER(ctypes.c_double), # J_x_num output (6x6 -> 36 flat)
-            ctypes.POINTER(ctypes.c_double), # h_num output (6x1)
-            ctypes.POINTER(ctypes.c_double)  # J_h_num output (6x6 -> 36 flat)
-        ]
-
 
 
 
@@ -130,65 +101,6 @@ class robot:
         Iz = inertia_matrix[2, 2]
 
         return total_mass, Ix, Iz
-
-
-
-    def calculate_real_dynamics(self, state, Fx, Mz, use_dist, dt):
-            """Wrapper to safely feed numpy arrays straight into the raw C memory blocks."""
-            # Ensure data arrays are contiguous float64 types for C compatibility
-            in_obs = np.ascontiguousarray(state, dtype=np.float64)
-
-            # Allocate empty output buffers for the C function to write into
-            dot_x = np.zeros(6, dtype=np.float64)
-            J_x   = np.zeros(36, dtype=np.float64)
-            h     = np.zeros(6, dtype=np.float64)
-            J_h   = np.zeros(36, dtype=np.float64)
-
-            # Invoke the native C function execution loop
-
-            self.lib_real_model.vehicle_dynamics_real(
-                in_obs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                ctypes.c_double(Fx),
-                ctypes.c_double(Mz),
-                dot_x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                J_x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                h.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                J_h.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-            )
-
-            if(use_dist):
-                 dot_x += 4*np.sin(2*np.pi*2*dt)
-                 dot_x[-1] = 0.8*np.sin(2*np.pi*0.05*dt)
-            
-            # Reshape flat 1D output buffers back into proper 2D matrices
-            return dot_x, J_x.reshape((6, 6), order='F'), h, J_h.reshape((6, 6), order='F') 
-
-
-    def calculate_obs_dynamics(self, state, Fx, Mz):
-            """Wrapper to safely feed numpy arrays straight into the raw C memory blocks."""
-            # Ensure data arrays are contiguous float64 types for C compatibility
-            in_obs = np.ascontiguousarray(state, dtype=np.float64)
-
-            # Allocate empty output buffers for the C function to write into
-            dot_x = np.zeros(6, dtype=np.float64)
-            J_x   = np.zeros(36, dtype=np.float64)
-            h     = np.zeros(6, dtype=np.float64)
-            J_h   = np.zeros(36, dtype=np.float64)
-
-            # Invoke the native C function execution loop
-
-            self.lib_obs_model.vehicle_dynamics_obs(
-                in_obs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                ctypes.c_double(Fx),
-                ctypes.c_double(Mz),
-                dot_x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                J_x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                h.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                J_h.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-            )
-            
-            # Reshape flat 1D output buffers back into proper 2D matrices
-            return dot_x, J_x.reshape((6, 6), order='F'), h, J_h.reshape((6, 6), order='F') 
 
 
     def computeJacobian(self):
