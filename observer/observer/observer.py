@@ -186,10 +186,8 @@ class TruckStateObserver(Node):
         matrix_reduced = np.delete(matrix_reduced, enum_obs_state.VX, axis=1)
         self.jacobian = matrix_reduced
         # Compute Jacobian correction
-        self.JacobianObserver(dot_observed_state, self.output.copy(), dt)   
-
         self.observed_output = h_hat_meas
-        self.observed_output[enum_outputs.DOT_WX] = self.dot_omega_x_obs
+        self.JacobianObserver(dot_observed_state, self.output.copy(), dt)   
 
         self.observed_state_data.append(self.observed_state.copy())
         self.observed_output_data.append(self.observed_output.copy())
@@ -242,6 +240,7 @@ class TruckStateObserver(Node):
         self.observed_state[4] = real_output[5]
         
         self.LevantDifferentiatior(dot_observed_state[enum_obs_state.WX], real_output, dt)
+        self.observed_output[enum_outputs.DOT_WX] = self.dot_omega_x_obs
 
         st = self.state
         obs = self.observed_state
