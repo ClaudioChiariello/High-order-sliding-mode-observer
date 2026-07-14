@@ -1,0 +1,15 @@
+o increasing lambda2 I wide the observer bandwidth, allowing it to track better the disturbances that changes fast, 
+but I would allow it to track also noise in high frequency?"
+
+Exactly. Your understanding is correct.
+
+Increasing λ
+2
+	​
+
+ has a double effect:
+
+✅ It increases the observer bandwidth → it can track faster disturbances.
+❌ It also increases sensitivity to high-frequency noise.
+
+This is the fundamental trade-off.
