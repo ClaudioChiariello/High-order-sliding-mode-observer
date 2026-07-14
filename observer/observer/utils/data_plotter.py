@@ -13,7 +13,7 @@ class DataPlotter:
 
         self.data = {}
 
-    def PlotAtEnd(self, sate_data, output_data, observed_state_data, observed_output_data, gazebo_state, gazebo_output, time_data, show_gazebo=True):
+    def PlotAtEnd(self, sate_data, output_data, observed_state_data, observed_output_data, gazebo_state, gazebo_output, time_data, phi_s, show_gazebo=True):
         
         state = np.array(sate_data)
         output = np.array(output_data)
@@ -30,6 +30,7 @@ class DataPlotter:
             time,
             output[:, enum_outputs.VX],
             observed_out[:, enum_outputs.VX],
+            Title = "Forward velocity",
             ylabel="vx [m/s]",
             filename="forward_vel.png",
             gazebo=gz_out[:, enum_outputs.VX] if (show_gazebo and gz_out is not None) else None
@@ -40,6 +41,7 @@ class DataPlotter:
             time,
             output[:, enum_outputs.ACC_Y],
             observed_out[:, enum_outputs.ACC_Y],
+            Title = "Lateral acceleration",
             ylabel="ay [m/s^2]",
             filename="LAteral_ACC.png",
             gazebo=gz_out[:, enum_outputs.ACC_Y] if (show_gazebo and gz_out is not None) else None
@@ -50,6 +52,7 @@ class DataPlotter:
             time,
             output[:, enum_outputs.WZ],
             observed_out[:, enum_outputs.WZ],
+            Title = "Angular velocity about z; wz",
             ylabel="wz [rad/s]",
             filename="angular_vel_z.png",
             gazebo=gz_out[:, enum_outputs.WZ] if (show_gazebo and gz_out is not None) else None
@@ -60,6 +63,7 @@ class DataPlotter:
             time,
             output[:, enum_outputs.DOT_WX],
             observed_out[:, enum_outputs.DOT_WX],
+            Title = "Angular acceleration about x; dot_wx",
             ylabel="dot_WX [rad/s^2]",
             filename="dot_Wx.png",
             gazebo=gz_out[:, enum_outputs.DOT_WX] if (show_gazebo and gz_out is not None) else None
@@ -70,6 +74,7 @@ class DataPlotter:
             time,
             state[:, enum_obs_state.VY],
             observed_state[:, enum_obs_state.VY], # Kept as observed_out to match your original configuration
+            Title = "Lateral velocity Vy",
             ylabel="vy [m/s]",
             filename="Lateral_vel.png",
             gazebo=gz_state[:, enum_obs_state.VY] if (show_gazebo and gz_state is not None) else None
@@ -78,8 +83,9 @@ class DataPlotter:
         # 6. Roll Orientation (PHI_TOT)
         self.plot(
             time,
-            output[:, enum_outputs.ROLL],
-            observed_out[:, enum_outputs.ROLL],
+            state[:, enum_outputs.ROLL],
+            observed_state[:, enum_outputs.ROLL],
+            Title = "phi total",
             ylabel="phi_tot [rad]",
             filename="phi_tot.png",
             gazebo=gz_out[:, enum_outputs.ROLL] if (show_gazebo and gz_out is not None) else None
@@ -87,15 +93,33 @@ class DataPlotter:
 
         self.plot(
             time,
+            state[:, enum_obs_state.PHI_U],
+            observed_state[:, enum_obs_state.PHI_U],
+            Title = "phi unsprung mass",
+            ylabel="phi_u [rad]",
+            filename="phi_u.png",
+            gazebo=gz_out[:, enum_obs_state.PHI_U] if (show_gazebo and gz_out is not None) else None
+        )
+
+        self.plot(
+            time,
             output[:, enum_outputs.WX],
             observed_out[:, enum_outputs.WX],
+            Title = "Angular velocity about x",
             ylabel="wx [rad/s]",
             filename="omega_x.png",
             gazebo=gz_out[:, enum_outputs.ROLL] if (show_gazebo and gz_out is not None) else None
         )
 
+        self.plot_just_one(
+            time,
+            phi_s,
+            var_name = "phi_s",
+            ylabel="phi_s [rad/s]",
+            filename="phi_s.png",
+        )
 
-    def plot(self, time, real, observed, ylabel, filename, gazebo=None):
+    def plot(self, time, real, observed, Title, ylabel, filename, gazebo=None):
         plt.figure(figsize=(10, 6))
 
         # Core Plots
@@ -106,6 +130,7 @@ class DataPlotter:
         if gazebo is not None:
             plt.plot(time, gazebo, label="Gazebo Ground Truth", linestyle="-.", linewidth=1.5, color="forestgreen")
 
+        plt.title(Title)
         plt.xlabel("time [s]")
         plt.ylabel(ylabel)
 
@@ -117,3 +142,20 @@ class DataPlotter:
         plt.close()
 
         print(f"Saved: {save_file}")
+
+
+
+    def plot_just_one(self, time, x, var_name, ylabel, filename):
+        plt.figure(figsize=(10, 6))
+
+        # Core Plots
+        plt.plot(time, x, label=var_name, linewidth=2.5, color="royalblue")
+    
+        plt.xlabel("time [s]")
+        plt.ylabel(ylabel)
+        plt.title(var_name)
+        plt.grid(True, linestyle=":", alpha=0.6)
+        plt.legend()
+        save_file = os.path.join(self.save_path, filename)
+        plt.savefig(save_file, dpi=300, bbox_inches="tight")
+        plt.close()

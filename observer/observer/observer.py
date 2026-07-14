@@ -133,6 +133,14 @@ class TruckStateObserver(Node):
         self.omega_x_obs = np.float32(0.0)
         self.dot_omega_x_obs = np.float32(0.0) 
 
+        self.zita2 = np.float32(0.0)
+        self.zita3 = np.float32(0.0)
+
+        self.dot_omega_x_obs_prev = np.float32(0.0) 
+
+        self.phi_s_data = []
+
+
     def GazeboControl(self):
         msg = Twist()
         # Linear velocity (m/s)
@@ -169,7 +177,7 @@ class TruckStateObserver(Node):
         dot_x, J_x, h_meas, _ = self.truck.calculate_real_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
         
         self.state += dot_x*dt
-        self.output = h_meas
+        self.output = self.add_white_noise(h_meas, 0.01)
 
         self.state_data.append(self.state.copy())
         self.output_data.append(self.output.copy())
@@ -197,7 +205,6 @@ class TruckStateObserver(Node):
         self.time_data.append(self.sim_time)
 
 
-   
     def JacobianObserver(self, dot_observed_state, real_output, dt):
         
         J_inv = np.linalg.inv(self.jacobian)
@@ -205,26 +212,19 @@ class TruckStateObserver(Node):
         alpha = 50
         beta = 1.5
 
-        # alpha = 0.0001
-        # beta = 0.00005
-
-
         estimated_error = real_output - self.observed_output
         estimated_error = estimated_error[:5]
-
-        #estimated_error[out.DOT_WX] = estimated_error[out.WX]
 
         root_abs_error = np.sqrt(np.abs(estimated_error))
 
         # 2. Overwrite just the specific indices using vectorized assignment
-        root_abs_error[enum_outputs.WX] = np.abs(estimated_error[enum_outputs.WX]) ** (2/3)
         root_abs_error[enum_outputs.DOT_WX] = np.abs(estimated_error[enum_outputs.WX]) ** (1/3)
 
         sign_error = np.tanh(self.scale_tanh*estimated_error)
 
         self.w += beta*sign_error
-        self.w[enum_outputs.WX] = 0.0
-        
+        self.w[[enum_outputs.DOT_WX]] = 0.0
+    
         correction_term = alpha * root_abs_error * sign_error + self.w
 
         #Remove the 5th elements
@@ -234,54 +234,50 @@ class TruckStateObserver(Node):
         # Re-insert a 0.0 value at index 4 so it matches the 6-element layout of self.observed_state
 
         state = np.insert(state_rate_reduced, 4, 0.0)
-
-        self.observed_state += state * dt
-
-        self.observed_state[4] = real_output[5]
         
-        self.LevantDifferentiatior(dot_observed_state[enum_obs_state.WX], real_output, dt)
+        self.observed_state += state * dt
+        self.observed_state[enum_obs_state.VX] = real_output[enum_outputs.VX]
+        
+        self.STDifferentiator(real_output[enum_outputs.WX], dt)
+
         self.observed_output[enum_outputs.DOT_WX] = self.dot_omega_x_obs
 
-        st = self.state
-        obs = self.observed_state
+        phi_s = self.observed_state[enum_obs_state.ROLL] - self.observed_state[enum_obs_state.PHI_U]
+        self.phi_s_data.append(phi_s)
+        self.print()
 
-        self.counter+=1
-        if self.counter % (1/self.fixed_dt) == 0:
-            self.get_logger().info(
-            f"real (estimated)\n"
-            f"Ang : r={st[enum_obs_state.ROLL]:7.3f} ({obs[enum_obs_state.ROLL]:7.3f})\n "
-            f"Vel : vx={st[enum_obs_state.VX]:7.3f} ({obs[enum_obs_state.VX]:7.3f}) "
-            f"vy={st[enum_obs_state.VY]:7.3f} ({obs[enum_obs_state.VY]:7.3f})\n"
-            f"Rate: wx={st[enum_obs_state.WX]:7.3f} ({obs[enum_obs_state.WX]:7.3f})  "
-            f"wz={st[enum_obs_state.WZ]:7.3f} ({obs[enum_obs_state.WZ]:7.3f})\n"
-            f"dot_WX={real_output[enum_outputs.DOT_WX]:7.3f} ({self.dot_omega_x_obs:7.3f})\n"
-            f"differentiator_wx={real_output[enum_outputs.WX]:7.3f} ({self.omega_x_obs:7.3f})\n"
-
-            f"dt={dt:.4f}"
-        )
 
 
     """To copute the transportation term I correctly need an estimation of dot_omega"""
-    def LevantDifferentiatior(self, dot_wx, real_output, dt):
+    def STDifferentiator(self, y, dt):
+        
 
-        error = self.omega_x_obs - real_output[enum_outputs.WX]
+        error = self.omega_x_obs - y
 
-        # gains
-        lambda1 = 50.0 
-        #lambda2 = 400.0 # for dist of 2.5 Hz, otherwise 50
-        lambda2 = 450.0 # for dist of 1.5 Hz 
+        lambda1 = 25
+        lambda2 = 100 
+
+        # lambda1 = 1.5*np.sqrt(L)
+        # lambda2 = 1.1*L
 
         # smooth sign (replace with np.sign if chattering is acceptable)
         s = np.tanh(self.scale_tanh * error)
 
         # observer equations
-        omega_hat_dot = self.dot_omega_x_obs - lambda1 * np.sqrt(np.abs(error)) * s
-        dot_omega_hat_dot = -lambda2 * s
+        dot_z1 =  - 10 * np.sqrt(np.abs(error)) * s + self.zita2
+        zita2_dot = -5 * s + self.zita3
+        self.omega_x_obs += dot_z1 * dt
+        self.zita2 += zita2_dot * dt
 
+        dot_z2 = -lambda1 * np.sqrt( np.abs( self.dot_omega_x_obs - self.zita2)) *np.tanh(self.scale_tanh * (self.dot_omega_x_obs - self.zita2)) + self.zita3
+        zita3_dot = -lambda2 * np.tanh(self.scale_tanh * (self.dot_omega_x_obs - self.zita2))
+        self.dot_omega_x_obs += dot_z2*dt
+        self.zita3 += zita3_dot*dt
         # integrate
-        self.omega_x_obs += omega_hat_dot * dt
-        self.dot_omega_x_obs += dot_omega_hat_dot * dt
 
+    def add_white_noise(self, signal, sigma):
+
+        return signal + np.random.normal(0.0, sigma, np.shape(signal))
 
 
     def AtEnd(self):
@@ -296,8 +292,28 @@ class TruckStateObserver(Node):
         self.plotter.PlotAtEnd(self.state_data[:n],  self.output_data[:n],
                             self.observed_state_data[:n], self.observed_output_data[:n],
                             self.gazebo_state_data[:n], self.gazebo_output_data[:n],
-                            self.time_data[:n])
+                            self.time_data[:n], self.phi_s_data[:n])
 
+
+
+    def print(self):
+
+        st = self.state
+        obs = self.observed_state
+        self.counter+=1
+
+
+        if self.counter % (1/self.fixed_dt) == 0:
+            self.get_logger().info(
+            f"real (estimated)\n"
+            f"Ang : r={st[enum_obs_state.ROLL]:7.3f} ({obs[enum_obs_state.ROLL]:7.3f})\n "
+            f"Vel : vx={st[enum_obs_state.VX]:7.3f} ({obs[enum_obs_state.VX]:7.3f}) "
+            f"vy={st[enum_obs_state.VY]:7.3f} ({obs[enum_obs_state.VY]:7.3f})\n"
+            f"Rate: wx={st[enum_obs_state.WX]:7.3f} ({obs[enum_obs_state.WX]:7.3f})  "
+            f"wz={st[enum_obs_state.WZ]:7.3f} ({obs[enum_obs_state.WZ]:7.3f})\n"
+            # f"dot_WX={real_output[enum_outputs.DOT_WX]:7.3f} ({self.dot_omega_x_obs:7.3f})\n"
+            # f"differentiator_wx={real_output[enum_outputs.WX]:7.3f} ({self.omega_x_obs:7.3f})\n"
+        )
 
 
     def print_time(self):

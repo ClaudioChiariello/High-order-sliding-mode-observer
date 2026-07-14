@@ -19,14 +19,23 @@ function [model_state, dot_x, J_x, h, J_h] = compute_truck_real_state(p, s)
      
     total_len = p.L(1) + p.L(4); 
     
+    % T_inv = [1, sin(phi)*tan(theta), cos(phi)*tan(theta);
+    %          0, cos(phi),            -sin(phi);
+    %          0, sin(phi)/cos(theta),  cos(phi)/cos(theta)];
+    % considera che questo sistema hai voluto scriverlo nel frame delle
+    % passe sprung. Quindi hai sen(phi_s) nel gravitational term perchè
+    % phi_s è lo scostamento angolare dalla posizione di equilibrio della
+    % massa sprung. Stesso ragionamento per i termini che moltiplicano la
+    % costante elastica e smorzamento.
+    
     %% 4. Derivate di Stato (Dinamica di Sistema)
     dvx    = s.Fx / p.m + s.vy * s.wz;
     dvy    = -s.vx * s.wz + (F_lateral_total) / p.m;
-    dot_wx = (p.m * (-s.vx * s.wz + (F_lateral_total) / p.m) * p.h_com + p.m * p.g * sin(s.phi) - p.Cr * s.wx - p.Kr * (s.phi - s.phi_u)) / p.Ix;
     dot_wz = (s.Mz + tire_yaw_moment) / p.Iz;
     dphi   = s.wx;
     dphi_u = 0;
-    
+    dot_wx = (p.m * (-s.vx * s.wz + (F_lateral_total) / p.m)*p.h_com + p.m*p.g*sin(s.phi - s.phi_u)*p.h_com - p.Cr*(dphi-dphi_u)  - p.Kr * (s.phi - s.phi_u)) / p.Ix;
+
     % Vettore finale delle derivate
     dot_x = [dphi; dot_wx; dvy; dot_wz; dvx; dphi_u];
     

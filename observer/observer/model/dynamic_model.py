@@ -63,10 +63,12 @@ class DynamicModel:
                 h.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
                 J_h.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
             )
-
+            
             if(use_dist):
-                dot_x += np.sin(2*np.pi*1.5*dt)
-                dot_x[-1] = 0.8*np.sin(2*np.pi*0.05*dt)
+                phi_u = np.deg2rad(45) * np.sin(2*np.pi*(1/5)*dt)
+                dphi_u = np.deg2rad(45) * 1/(2*np.pi*(1/5)) * (-np.cos(2*np.pi*(1/5)*dt))
+                dot_x += np.sin(2*np.pi*1.25*dt)
+                dot_x[-1] = dphi_u
             
             # Reshape flat 1D output buffers back into proper 2D matrices
             return dot_x, J_x.reshape((6, 6), order='F'), h, J_h.reshape((6, 6), order='F') 
@@ -102,16 +104,7 @@ class DynamicModel:
 
     def joint_states_callback(self, joint_msg):
 
-        for name, position in zip(joint_msg.name, joint_msg.position):
-            joint_id = self.model.getJointId(name)
-
-            if joint_id == 0:
-                continue
-
-            idx_q = self.model.joints[joint_id].idx_q
-
-            self.q[idx_q] = position
-   
+        a = joint_msg
 
     def PdController(self, current_state, des_vel_x, des_omega_z, dt):
 

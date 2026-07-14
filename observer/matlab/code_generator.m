@@ -63,7 +63,7 @@ cfg.GenerateExampleMain = 'DoNotGenerate';
 cfg.TargetLangStandard = 'C99 (ISO)';       
 cfg.TargetLang = 'C';
 
-%addpath("symbolic_matlab_function_generated");
+addpath("symbolic_matlab_function_generated");
 
 codegen symbolic_matlab_function_generated/vehicle_dynamics_real -args {zeros(6, 1), 0.0, 0.0} -config cfg -report
 codegen symbolic_matlab_function_generated/vehicle_dynamics_obs -args {zeros(6, 1), 0.0, 0.0} -config cfg -report
