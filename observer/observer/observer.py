@@ -177,7 +177,11 @@ class TruckStateObserver(Node):
         dot_x, J_x, h_meas, _ = self.truck.calculate_real_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
         
         self.state += dot_x*dt
-        self.output = self.add_white_noise(h_meas, 0.01)
+       
+        self.output = h_meas
+        self.output[[enum_outputs.WX, enum_outputs.WZ]] = self.Gazebo.add_white_noise_gyro(h_meas[[enum_outputs.WX, enum_outputs.WZ]])
+        self.output[[enum_outputs.ACC_Y]] = self.Gazebo.add_white_noise_acceleration(h_meas[enum_outputs.ACC_Y])
+        
 
         self.state_data.append(self.state.copy())
         self.output_data.append(self.output.copy())
@@ -275,9 +279,7 @@ class TruckStateObserver(Node):
         self.zita3 += zita3_dot*dt
         # integrate
 
-    def add_white_noise(self, signal, sigma):
 
-        return signal + np.random.normal(0.0, sigma, np.shape(signal))
 
 
     def AtEnd(self):

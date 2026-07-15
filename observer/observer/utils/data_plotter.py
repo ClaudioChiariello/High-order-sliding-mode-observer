@@ -83,8 +83,8 @@ class DataPlotter:
         # 6. Roll Orientation (PHI_TOT)
         self.plot(
             time,
-            state[:, enum_outputs.ROLL],
-            observed_state[:, enum_outputs.ROLL],
+            output[:, enum_outputs.ROLL],
+            observed_out[:, enum_outputs.ROLL],
             Title = "phi total",
             ylabel="phi_tot [rad]",
             filename="phi_tot.png",

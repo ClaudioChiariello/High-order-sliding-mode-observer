@@ -79,6 +79,30 @@ class GazeboCallback:
             self.gazebo_state[enum_obs_state.VY] =  odom_msg.twist.twist.linear.y
 
 
+    def add_white_noise_gyro(self, signal):
+
+        noise_density = 0.01 * np.pi/180 #rad/s/sqrt(Hz)
+        imu_bandwidth = 415 #Hz
+        standard_deviation = 2*noise_density * np.sqrt(imu_bandwidth)
+
+        in_bias_stability = 10 *np.pi/180/3600   # rad/s
+        
+        
+        return signal + np.random.normal(in_bias_stability, standard_deviation, np.shape(signal))
+
+
+    def add_white_noise_acceleration(self, signal):
+
+        noise_density = 60e-6  #g
+        imu_bandwidth = 375 #Hz
+        standard_deviation = 2*noise_density * np.sqrt(imu_bandwidth)
+
+        in_bias_stability = 15e-6  #g
+        
+        
+        return signal + np.random.normal(in_bias_stability, standard_deviation, np.shape(signal))
+
+
   
     def get_state_output(self):
 
