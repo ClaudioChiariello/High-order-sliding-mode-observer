@@ -28,6 +28,8 @@ setup(
     entry_points={
         'console_scripts': [
              'teleop_keyboard = truck_description.teleop_keyboard:main',
+             'converter2mujoco = truck_description.convert_urdf_to_mj:main',
+             'viewer = truck_description.mujoco_viewer:main '
         ],
     },
 )

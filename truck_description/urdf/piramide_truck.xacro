@@ -18,4 +18,6 @@
   <xacro:if value="${'$(arg control_mode)' == 'plugin'}">
     <xacro:include filename="$(find truck_plugin_pkg)/urdf/truck_plugin.xacro" />
   </xacro:if>
+
+  
 </robot>

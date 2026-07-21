@@ -30,6 +30,7 @@ def generate_launch_description():
     app_point_offset = LaunchConfiguration("app_point_offset")
     steering_limit = LaunchConfiguration("steering_limit")
 
+    # Run the xacro command to convert the xacro file into an urdf
     robot_description_content = Command([
         FindExecutable(name="xacro"),
         " ",
@@ -37,19 +38,19 @@ def generate_launch_description():
         " ",
         "control_mode:=",
         control_mode,
-        " ",
-        "driven_wheels:=",
+        " use_pid:=false",
+        " use_mjcf_from_topic:=false",
+        " headless:=false",
+        " driven_wheels:=",
         driven_wheels,
-        " ",
-        "app_point_offset:=",
+        " app_point_offset:=",
         app_point_offset,
-        " ",
-        "steering_limit:=",
+        " steering_limit:=",
         steering_limit,
     ])
 
     truck_control_pkg_share = get_package_share_directory('truck_control')
-    parameters_file = PathJoinSubstitution([truck_control_pkg_share, "config", "truck8x8_controllers.yaml"])
+    controller_manager_parameters_file = PathJoinSubstitution([truck_control_pkg_share, "config", "truck8x8_controllers.yaml"])
     mujoco_plugins_file = PathJoinSubstitution([truck_control_pkg_share, "config", "mujoco_ros2_control_plugins.yaml"])
 
     # ros2_control node with MuJoCo. Nota che lo stesso eseguibile del pacchetto controller_manager. Per gz sim devi lanciarlo da xml
@@ -77,7 +78,7 @@ def generate_launch_description():
             output="both",
             parameters=[
                 {"use_sim_time": True},
-                ParameterFile(parameters_file),
+                ParameterFile(controller_manager_parameters_file),
                 ParameterFile(mujoco_plugins_file),
             ],
             remappings=(
@@ -94,7 +95,7 @@ def generate_launch_description():
             Node(
                 package="controller_manager",
                 executable="spawner",
-                arguments=[controller, "--param-file", parameters_file],
+                arguments=[controller, "--param-file", controller_manager_parameters_file],
                 output="both",
             )
         )
