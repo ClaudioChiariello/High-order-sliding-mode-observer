@@ -43,6 +43,7 @@ setup(
     entry_points={
         'console_scripts': [
             'observer = observer.observer:main',
+            'mujoco_state = observer.mujoco_model:main'
         ],
     }
 )

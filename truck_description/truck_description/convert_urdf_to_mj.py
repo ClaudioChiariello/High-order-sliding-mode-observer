@@ -4,9 +4,28 @@ import mujoco
 from ament_index_python.packages import get_package_share_directory, get_package_prefix
 
 
-def add_actuator_tag(mjcf_root):
+def set_mujoco_solver(mjcf_root, solver_type="Newton"):
+    """
+    Sets the MuJoCo solver algorithm.
+    Options: 'Newton', 'CG', or 'PGS'
+    """
+    option_elem = mjcf_root.find("option")
     
+    # Create <option> if it doesn't exist yet
+    if option_elem is None:
+        option_elem = ET.SubElement(mjcf_root, "option")
+        
+    # Set the solver attribute
+    option_elem.set("solver", solver_type)
+    
+    # Optional: For heavy contact models like multi-wheel trucks, 
+    # boosting solver iterations prevents energy loss during turns:
+    option_elem.set("iterations", "50")
+    option_elem.set("tolerance", "1e-10")
+
+def add_actuator_tag(mjcf_root):
     actuator_elem = ET.SubElement(mjcf_root, "actuator")
+    
     # Steering actuators (Position control)
     steer_joints = [
         "left_steer_joint_a1", "right_steer_joint_a1",
@@ -15,13 +34,15 @@ def add_actuator_tag(mjcf_root):
 
     for j in steer_joints:
         ET.SubElement(actuator_elem, "position", {
-            "name": j, "joint": j, "kp": "1000", "kv": "1000"
+            "name": j, "joint": j, "kp": "1e6", "kv": "2e4"
         })
 
-
+    # Set force limit on steer joints
     for joint in mjcf_root.iter("joint"):
         if joint.get("name") in steer_joints:
-            joint.set("actuatorfrcrange", "-100000 100000")
+            joint.set("actuatorfrcrange", "-1e8 1e8")
+            #joint.set("damping", "0.5")  # Prevents runaway lateral energy transfer
+            joint.set("armature", "0.01") # Adds realistic rotor inertia       
 
     # Wheel drive actuators (Velocity control)
     rot_joints = [
@@ -30,22 +51,44 @@ def add_actuator_tag(mjcf_root):
         "left_rot_joint_a3", "right_rot_joint_a3",
         "left_rot_joint_a4", "right_rot_joint_a4"
     ]
+    
     for j in rot_joints:
         ET.SubElement(actuator_elem, "velocity", {
-            "name": j, "joint": j, "kv": "1200"
+            "name": j, 
+            "joint": j, 
+            "kv": "8000",
+            "forcerange": "-2e7 2e7"  # <--- Fix: Force limit for velocity actuators
         })
+
     ET.indent(actuator_elem, space="  ")
 
+def update_wheel_friction(mjcf_root):
+    """Sets customized friction for wheel collision geoms to eliminate sideways scrubbing."""
+    wheel_keywords = ["wheel", "rot_joint", "axis1", "axis2", "axis3", "axis4"]
 
+    for geom in mjcf_root.iter("geom"):
+        geom_name = geom.get("name", "").lower()
+        
+        # Target wheel collision geoms specifically
+        if any(keyword in geom_name for keyword in wheel_keywords):
+            # condim="4" enables 3D contact + torsional friction (twist resistance)
+            geom.set("condim", "4")
+            
+            # Values: [sliding, torsional, rolling]
+            # 1.1   -> High sliding grip so tires don't slide laterally
+            # 0.005 -> Very low torsional friction so wheels twist/turn smoothly without dragging
+            # 0.0001 -> Low rolling resistance for fast forward motion
+            geom.set("friction", "0.9 0.02 0.002")
+ 
 
 def add_sensor_tag(mjcf_root):
     sensor_elem = ET.SubElement(mjcf_root, "sensor")
     ET.SubElement(sensor_elem, "framepos", {
-        "name": "body_pos", "objtype": "body", "objname": "left_wheel_axis3_1"
+        "name": "body_pos", "objtype": "body", "objname": "base_link"
     })
 
     ET.SubElement(sensor_elem, "framequat", {
-        "name": "body_quat", "objtype": "body", "objname": "left_wheel_axis3_1"
+        "name": "body_quat", "objtype": "body", "objname": "base_link"
     })
 
     ET.indent(sensor_elem, space="  ")
@@ -88,6 +131,8 @@ def remove_contact_meshed(mjcf_root):
             geom.set("group", "1")  # Visible layer
 
 
+
+
 def main():
 
     truck_description = get_package_share_directory('truck_description')
@@ -106,6 +151,8 @@ def main():
         "fusestatic": "false",
         "discardvisual": "false"
     })
+
+
 
     # Clean file:// paths
     modified_urdf_str = ET.tostring(root, encoding="unicode").replace("file://", "")
@@ -132,9 +179,10 @@ def main():
                 # Create <freejoint name="root_freejoint"/> inside the base body
                 ET.SubElement(root_body, "freejoint", {"name": "root_freejoint"})
 
-
+    set_mujoco_solver(mjcf_root)
     add_actuator_tag(mjcf_root)
     add_sensor_tag(mjcf_root)
+    update_wheel_friction(mjcf_root)  # Dynamic friction adjustment
     remove_contact_meshed(mjcf_root)
 
     # 5. Save updated XML
