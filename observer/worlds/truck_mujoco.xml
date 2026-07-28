@@ -24,69 +24,69 @@
       <body name="base_link" pos="2.6815 0 0" quat="0 0 0 1">
         <inertial pos="-2.31579 0.0603091 2.08329" quat="2.74914e-05 0.759922 2.85481e-05 0.650014" mass="11829.5" diaginertia="100530 98410.6 12461.6" />
         <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.7 0.7 0.7 1" mesh="base_link" />
-        <geom size="5.1 1.3 1.8" pos="0 2.77217e-05 2.04082" type="box" rgba="0.7 0.7 0.7 1" group="3" />
+        <geom size="5.1 1.3 1.8" pos="0 2.77217e-05 2.04082" type="box" rgba="0.7 0.7 0.7 1" group="3" contype="4" conaffinity="4" />
         <body name="left_wheel_axis4_1" pos="3.33357 -0.983719 0.602025">
           <inertial pos="3.47287e-07 4.74491e-07 4.7822e-07" quat="0.707107 0 0 0.707107" mass="121.31" diaginertia="24.2102 13.0741 13.0741" />
           <joint name="left_rot_joint_a4" pos="0 0 0" axis="0 -1 0" />
           <geom pos="-3.33357 0.983719 -0.602025" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0 0 0 1" mesh="left_wheel_axis4_1" />
-          <geom name="left_wheel_axis4_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" friction="0.9 0.02 0.002" group="3" />
+          <geom name="left_wheel_axis4_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" contype="2" conaffinity="1" friction="0.9 0.02 0.002" group="3" />
         </body>
         <body name="left_wheel_axis3_1" pos="1.95157 -0.983719 0.602025">
           <inertial pos="3.47287e-07 4.74491e-07 4.7822e-07" quat="0.707107 0 0 0.707107" mass="121.31" diaginertia="24.2102 13.0741 13.0741" />
           <joint name="left_rot_joint_a3" pos="0 0 0" axis="0 -1 0" />
           <geom pos="-1.95157 0.983719 -0.602025" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0 0 0 1" mesh="left_wheel_axis3_1" />
-          <geom name="left_wheel_axis3_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" friction="0.9 0.02 0.002" group="3" />
+          <geom name="left_wheel_axis3_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" contype="2" conaffinity="1" friction="0.9 0.02 0.002" group="3" />
         </body>
         <body name="right_wheel_axis4_1" pos="3.33357 1.10428 0.602025">
           <inertial pos="3.47287e-07 4.74491e-07 4.7822e-07" quat="0.707107 0 0 0.707107" mass="121.31" diaginertia="24.2102 13.0741 13.0741" />
           <joint name="right_rot_joint_a4" pos="0 0 0" axis="0 -1 0" />
           <geom pos="-3.33357 -1.10428 -0.602025" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0 0 0 1" mesh="right_wheel_axis4_1" />
-          <geom name="right_wheel_axis4_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" friction="0.9 0.02 0.002" group="3" />
+          <geom name="right_wheel_axis4_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" contype="2" conaffinity="1" friction="0.9 0.02 0.002" group="3" />
         </body>
         <body name="right_wheel_axis3_1" pos="1.95157 1.10428 0.602025">
           <inertial pos="3.47287e-07 4.74491e-07 4.7822e-07" quat="0.707107 0 0 0.707107" mass="121.31" diaginertia="24.2102 13.0741 13.0741" />
           <joint name="right_rot_joint_a3" pos="0 0 0" axis="0 -1 0" />
           <geom pos="-1.95157 -1.10428 -0.602025" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0 0 0 1" mesh="right_wheel_axis3_1" />
-          <geom name="right_wheel_axis3_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" friction="0.9 0.02 0.002" group="3" />
+          <geom name="right_wheel_axis3_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" contype="2" conaffinity="1" friction="0.9 0.02 0.002" group="3" />
         </body>
         <body name="left_steer_axis2_link" pos="-1.79843 -1.00522 0.602025">
           <inertial pos="0 0 0" mass="0.01" diaginertia="1e-05 1e-05 1e-05" />
-          <joint name="left_steer_joint_a2" pos="0 0 0" axis="0 0 1" range="-0.523599 0.523599" actuatorfrcrange="-1e8 1e8" armature="0.01" />
+          <joint name="left_steer_joint_a2" pos="0 0 0" axis="0 0 1" range="-0.523599 0.523599" actuatorfrcrange="-1e8 1e8" damping="1e4" armature="1e2" />
           <body name="left_wheel_axis2_1">
             <inertial pos="3.47287e-07 4.74491e-07 4.7822e-07" quat="0.707107 0 0 0.707107" mass="121.31" diaginertia="24.2102 13.0741 13.0741" />
             <joint name="left_rot_joint_a2" pos="0 0 0" axis="0 -1 0" />
             <geom pos="1.79843 1.00522 -0.602025" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0 0 0 1" mesh="left_wheel_axis2_1" />
-            <geom name="left_wheel_axis2_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" friction="0.9 0.02 0.002" group="3" />
+            <geom name="left_wheel_axis2_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" contype="2" conaffinity="1" friction="0.9 0.02 0.002" group="3" />
           </body>
         </body>
         <body name="right_steer_axis2_link" pos="-1.79843 1.12578 0.602025">
           <inertial pos="0 0 0" mass="0.01" diaginertia="1e-05 1e-05 1e-05" />
-          <joint name="right_steer_joint_a2" pos="0 0 0" axis="0 0 1" range="-0.523599 0.523599" actuatorfrcrange="-1e8 1e8" armature="0.01" />
+          <joint name="right_steer_joint_a2" pos="0 0 0" axis="0 0 1" range="-0.523599 0.523599" actuatorfrcrange="-1e8 1e8" damping="1e4" armature="1e2" />
           <body name="right_wheel_axis2_1">
             <inertial pos="3.47287e-07 4.74491e-07 4.7822e-07" quat="0.707107 0 0 0.707107" mass="121.31" diaginertia="24.2102 13.0741 13.0741" />
             <joint name="right_rot_joint_a2" pos="0 0 0" axis="0 -1 0" />
             <geom pos="1.79843 -1.12578 -0.602025" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0 0 0 1" mesh="right_wheel_axis2_1" />
-            <geom name="right_wheel_axis2_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" friction="0.9 0.02 0.002" group="3" />
+            <geom name="right_wheel_axis2_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" contype="2" conaffinity="1" friction="0.9 0.02 0.002" group="3" />
           </body>
         </body>
         <body name="left_steer_axis1_link" pos="-3.69843 -1.00522 0.602025">
           <inertial pos="0 0 0" mass="0.01" diaginertia="1e-05 1e-05 1e-05" />
-          <joint name="left_steer_joint_a1" pos="0 0 0" axis="0 0 1" range="-0.523599 0.523599" actuatorfrcrange="-1e8 1e8" armature="0.01" />
+          <joint name="left_steer_joint_a1" pos="0 0 0" axis="0 0 1" range="-0.523599 0.523599" actuatorfrcrange="-1e8 1e8" damping="1e4" armature="1e2" />
           <body name="left_wheel_axis1_1">
             <inertial pos="3.47287e-07 4.74491e-07 4.7822e-07" quat="0.707107 0 0 0.707107" mass="121.31" diaginertia="24.2102 13.0741 13.0741" />
             <joint name="left_rot_joint_a1" pos="0 0 0" axis="0 -1 0" />
             <geom pos="3.69843 1.00522 -0.602025" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0 0 0 1" mesh="left_wheel_axis1_1" />
-            <geom name="left_wheel_axis1_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" friction="0.9 0.02 0.002" group="3" />
+            <geom name="left_wheel_axis1_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" contype="2" conaffinity="1" friction="0.9 0.02 0.002" group="3" />
           </body>
         </body>
         <body name="right_steer_axis1_link" pos="-3.69843 1.12578 0.602025">
           <inertial pos="0 0 0" mass="0.01" diaginertia="1e-05 1e-05 1e-05" />
-          <joint name="right_steer_joint_a1" pos="0 0 0" axis="0 0 1" range="-0.523599 0.523599" actuatorfrcrange="-1e8 1e8" armature="0.01" />
+          <joint name="right_steer_joint_a1" pos="0 0 0" axis="0 0 1" range="-0.523599 0.523599" actuatorfrcrange="-1e8 1e8" damping="1e4" armature="1e2" />
           <body name="right_wheel_axis1_1">
             <inertial pos="3.47287e-07 4.74491e-07 4.7822e-07" quat="0.707107 0 0 0.707107" mass="121.31" diaginertia="24.2102 13.0741 13.0741" />
             <joint name="right_rot_joint_a1" pos="0 0 0" axis="0 -1 0" />
             <geom pos="3.69843 -1.12578 -0.602025" quat="1 0 0 0" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0 0 0 1" mesh="right_wheel_axis1_1" />
-            <geom name="right_wheel_axis1_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" friction="0.9 0.02 0.002" group="3" />
+            <geom name="right_wheel_axis1_collision_1" size="0.5645" rgba="0 0 0 1" condim="4" contype="2" conaffinity="1" friction="0.9 0.02 0.002" group="3" />
           </body>
         </body>
         <body name="ouster_link_1" pos="-5.03468 0.060281 3.60202">
@@ -118,18 +118,18 @@
     <freejoint name="root_freejoint" /></body>
   </worldbody>
 <option solver="Newton" iterations="50" tolerance="1e-10" /><actuator>
-  <position name="left_steer_joint_a1" joint="left_steer_joint_a1" kp="1e6" kv="2e4" />
-  <position name="right_steer_joint_a1" joint="right_steer_joint_a1" kp="1e6" kv="2e4" />
-  <position name="left_steer_joint_a2" joint="left_steer_joint_a2" kp="1e6" kv="2e4" />
-  <position name="right_steer_joint_a2" joint="right_steer_joint_a2" kp="1e6" kv="2e4" />
-  <velocity name="left_rot_joint_a1" joint="left_rot_joint_a1" kv="8000" forcerange="-2e7 2e7" />
-  <velocity name="right_rot_joint_a1" joint="right_rot_joint_a1" kv="8000" forcerange="-2e7 2e7" />
-  <velocity name="left_rot_joint_a2" joint="left_rot_joint_a2" kv="8000" forcerange="-2e7 2e7" />
-  <velocity name="right_rot_joint_a2" joint="right_rot_joint_a2" kv="8000" forcerange="-2e7 2e7" />
-  <velocity name="left_rot_joint_a3" joint="left_rot_joint_a3" kv="8000" forcerange="-2e7 2e7" />
-  <velocity name="right_rot_joint_a3" joint="right_rot_joint_a3" kv="8000" forcerange="-2e7 2e7" />
-  <velocity name="left_rot_joint_a4" joint="left_rot_joint_a4" kv="8000" forcerange="-2e7 2e7" />
-  <velocity name="right_rot_joint_a4" joint="right_rot_joint_a4" kv="8000" forcerange="-2e7 2e7" />
+  <position name="left_steer_joint_a1" joint="left_steer_joint_a1" kp="5e4" kv="1e4" />
+  <position name="right_steer_joint_a1" joint="right_steer_joint_a1" kp="5e4" kv="1e4" />
+  <position name="left_steer_joint_a2" joint="left_steer_joint_a2" kp="5e4" kv="1e4" />
+  <position name="right_steer_joint_a2" joint="right_steer_joint_a2" kp="5e4" kv="1e4" />
+  <velocity name="left_rot_joint_a1" joint="left_rot_joint_a1" kv="7000" forcerange="-2e7 2e7" />
+  <velocity name="right_rot_joint_a1" joint="right_rot_joint_a1" kv="7000" forcerange="-2e7 2e7" />
+  <velocity name="left_rot_joint_a2" joint="left_rot_joint_a2" kv="7000" forcerange="-2e7 2e7" />
+  <velocity name="right_rot_joint_a2" joint="right_rot_joint_a2" kv="7000" forcerange="-2e7 2e7" />
+  <velocity name="left_rot_joint_a3" joint="left_rot_joint_a3" kv="7000" forcerange="-2e7 2e7" />
+  <velocity name="right_rot_joint_a3" joint="right_rot_joint_a3" kv="7000" forcerange="-2e7 2e7" />
+  <velocity name="left_rot_joint_a4" joint="left_rot_joint_a4" kv="7000" forcerange="-2e7 2e7" />
+  <velocity name="right_rot_joint_a4" joint="right_rot_joint_a4" kv="7000" forcerange="-2e7 2e7" />
 </actuator><sensor>
   <framepos name="body_pos" objtype="body" objname="base_link" />
   <framequat name="body_quat" objtype="body" objname="base_link" />

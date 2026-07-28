@@ -23,6 +23,7 @@ def set_mujoco_solver(mjcf_root, solver_type="Newton"):
     option_elem.set("iterations", "50")
     option_elem.set("tolerance", "1e-10")
 
+
 def add_actuator_tag(mjcf_root):
     actuator_elem = ET.SubElement(mjcf_root, "actuator")
     
@@ -34,15 +35,15 @@ def add_actuator_tag(mjcf_root):
 
     for j in steer_joints:
         ET.SubElement(actuator_elem, "position", {
-            "name": j, "joint": j, "kp": "1e6", "kv": "2e4"
+            "name": j, "joint": j, "kp": "5e4", "kv": "1e4"
         })
 
     # Set force limit on steer joints
     for joint in mjcf_root.iter("joint"):
         if joint.get("name") in steer_joints:
             joint.set("actuatorfrcrange", "-1e8 1e8")
-            #joint.set("damping", "0.5")  # Prevents runaway lateral energy transfer
-            joint.set("armature", "0.01") # Adds realistic rotor inertia       
+            joint.set("damping", "1e4")  # Prevents runaway lateral energy transfer
+            joint.set("armature", "1e2") # Adds realistic rotor inertia       
 
     # Wheel drive actuators (Velocity control)
     rot_joints = [
@@ -56,12 +57,22 @@ def add_actuator_tag(mjcf_root):
         ET.SubElement(actuator_elem, "velocity", {
             "name": j, 
             "joint": j, 
-            "kv": "8000",
+            "kv": "7000",
             "forcerange": "-2e7 2e7"  # <--- Fix: Force limit for velocity actuators
         })
 
     ET.indent(actuator_elem, space="  ")
 
+
+
+"""Senza questa funzione, mi ritrovo che le steering wheel sono in contatto anche con il base_link. In questo modo, si creano delle forze di contatto che sembrano
+    - O generare forze laterali che spingono il truck
+    - Oppure generano attriti tra i link delle ruote e quando si deve girare, questi attriti bloccano in qualche modo le ruote di steering, facendo rallentare il truck
+    Il problema l'ho risolto mettendo il base_link con una conaffinity che gli ipedisca di collidere con le steering wheel. Quella collisione bloccava il truck in qualche modo
+    
+    Aumentare la friction al link delle wheel anche aiutava, ma doveevo mettere numeri enormi. All'inizio pensavo che fosse che il tracking di velocità del controllore ros2 diminuiva
+    migliorasse perché aveva cambiato l'attrito con il terreno, e più attrito aiutava il controllore a tenere il truck sul percorso, ma in realtà stavo aumentando l'attrito tra le ruote
+    e il base link"""
 def update_wheel_friction(mjcf_root):
     """Sets customized friction for wheel collision geoms to eliminate sideways scrubbing."""
     wheel_keywords = ["wheel", "rot_joint", "axis1", "axis2", "axis3", "axis4"]
@@ -73,13 +84,31 @@ def update_wheel_friction(mjcf_root):
         if any(keyword in geom_name for keyword in wheel_keywords):
             # condim="4" enables 3D contact + torsional friction (twist resistance)
             geom.set("condim", "4")
-            
+            geom.set("contype","2")  #Setto un contype e conaffinity del link delle ruote in modo che possa essere compatibile solo con quello del terreno, ma non con quello del base_link
+            geom.set("conaffinity", "1")
+ 
             # Values: [sliding, torsional, rolling]
             # 1.1   -> High sliding grip so tires don't slide laterally
             # 0.005 -> Very low torsional friction so wheels twist/turn smoothly without dragging
             # 0.0001 -> Low rolling resistance for fast forward motion
             geom.set("friction", "0.9 0.02 0.002")
+
+    for body in mjcf_root.iter("body"):
+        if body.get("name") == "base_link":
+                    # Loop through all geoms that belong directly to base_link
+                    for geom in body.findall("geom"):
  
+                        # Optional: Only target collision geoms if group="3" or named "collision"
+                        # If you want to update ALL geoms under base_link, remove this if-statement:
+                        geom_name = geom.get("name", "").lower()
+                        contype = geom.get("contype", "")
+                        geom.set("group", "3")
+                        # Exclude pure visual geoms (contype="0") unless intended
+                        if contype != "0":
+                            geom.set("contype", "4")      # Bitwise mask for base_link
+                            geom.set("conaffinity", "4")  # lo metto in un conaffinity diverso da quello delle ruote e del terreno, per dire che non devono collidere tra loro
+                        
+
 
 def add_sensor_tag(mjcf_root):
     sensor_elem = ET.SubElement(mjcf_root, "sensor")
@@ -182,7 +211,7 @@ def main():
     set_mujoco_solver(mjcf_root)
     add_actuator_tag(mjcf_root)
     add_sensor_tag(mjcf_root)
-    update_wheel_friction(mjcf_root)  # Dynamic friction adjustment
+    update_wheel_friction(mjcf_root) 
     remove_contact_meshed(mjcf_root)
 
     # 5. Save updated XML
@@ -193,8 +222,6 @@ def main():
     mjcf_tree.write(observer_src, encoding="utf-8", xml_declaration=True)
     
     print(f"Successfully generated MuJoCo model with actuators & sensors at: {output_path}")
-
-
 
 
 if __name__ == '__main__':
