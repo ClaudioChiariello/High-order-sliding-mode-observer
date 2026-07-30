@@ -4,6 +4,39 @@ import mujoco
 from ament_index_python.packages import get_package_share_directory, get_package_prefix
 
 
+
+def convert_wheels_to_cylinders(mjcf_root, wheel_half_width="0.18"):
+    """
+    Converts wheel collision geoms from sphere shapes to cylinders.
+    
+    MuJoCo cylinders default to alignment along their local Z-axis.
+    Since wheel rotation joints are along the Y-axis (axis="0 -1 0"),
+    we rotate the cylinder by 90 degrees around the X-axis using 
+    quat="0.707107 0.707107 0 0" so it aligns with the rotation axis.
+    """
+    wheel_keywords = ["wheel", "rot_joint", "axis1", "axis2", "axis3", "axis4"]
+
+    for geom in mjcf_root.iter("geom"):
+        geom_name = geom.get("name", "").lower()
+        
+        # Target wheel collision geoms
+        if any(keyword in geom_name for keyword in wheel_keywords) and "collision" in geom_name:
+            # Change geometry type to cylinder
+            geom.set("type", "cylinder")
+            
+            # Extract current radius from size (e.g., "0.5645")
+            current_size = geom.get("size", "0.5645").split()
+            radius = current_size[0]
+            
+            # Cylinder size requires: "radius half_width"
+            geom.set("size", f"{radius} {wheel_half_width}")
+            
+            # Rotate cylinder's local Z axis to align with joint's Y axis
+            geom.set("quat", "0.707107 0.707107 0 0")
+
+            geom.set("solimp", "0.9 0.95 0.001 0.5 2")  # Gives tire elastic compliance
+            geom.set("solref", "0.02 1")
+
 def set_mujoco_solver(mjcf_root, solver_type="Newton"):
     """
     Sets the MuJoCo solver algorithm.
@@ -91,8 +124,9 @@ def update_wheel_friction(mjcf_root):
             # 1.1   -> High sliding grip so tires don't slide laterally
             # 0.005 -> Very low torsional friction so wheels twist/turn smoothly without dragging
             # 0.0001 -> Low rolling resistance for fast forward motion
-            geom.set("friction", "0.9 0.02 0.002")
+            geom.set("friction", "0.9 0.01 0.002")
 
+    # Setto il contype and conaffinity in modo che siano incompatibili da quelli delle ruote e del terreno, per dire che non devono collidere tra loro
     for body in mjcf_root.iter("body"):
         if body.get("name") == "base_link":
                     # Loop through all geoms that belong directly to base_link
@@ -106,7 +140,7 @@ def update_wheel_friction(mjcf_root):
                         # Exclude pure visual geoms (contype="0") unless intended
                         if contype != "0":
                             geom.set("contype", "4")      # Bitwise mask for base_link
-                            geom.set("conaffinity", "4")  # lo metto in un conaffinity diverso da quello delle ruote e del terreno, per dire che non devono collidere tra loro
+                            geom.set("conaffinity", "4")  #
                         
 
 
@@ -155,8 +189,12 @@ def remove_contact_meshed(mjcf_root):
         ) and "collision" not in geom_name
 
         if is_collision and not is_visual:
-            geom.set("group", "3")  # Hidden collision group
+            if geom_type == "cylinder":
+                geom.set("group", "4")  # Set wheel cylinders to group 4
+            else:
+                geom.set("group", "3")
         else:
+
             geom.set("group", "1")  # Visible layer
 
 
@@ -211,6 +249,7 @@ def main():
     set_mujoco_solver(mjcf_root)
     add_actuator_tag(mjcf_root)
     add_sensor_tag(mjcf_root)
+    convert_wheels_to_cylinders(mjcf_root, wheel_half_width="0.18")  # <--- Converts sphere -> cylinder
     update_wheel_friction(mjcf_root) 
     remove_contact_meshed(mjcf_root)
 

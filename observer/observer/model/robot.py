@@ -3,10 +3,11 @@ import os
 from ament_index_python.packages import get_package_share_directory 
 import pinocchio
 import numpy as np
-from .utils.states import state as s
-import ctypes
+from observer.utils.states import enum_obs_state as s
 
 class robot:
+
+
     def __init__(self):
         
         urdf_path = os.path.join(
@@ -14,30 +15,23 @@ class robot:
             'urdf',
             'truck.urdf'
         )
+
         self.model = pinocchio.buildModelFromUrdf(
             urdf_path
         )
 
         self.data = self.model.createData()
+
+        self.q = pinocchio.neutral(self.model)
+
         # Robot configuration
         dq = pinocchio.utils.zero(self.model.nv)  # joint velocities
+
         self.mass, self.Ix, self.Iz = self.get_mass_properties()
-        self.L = 0
-        self.delta = 0
-
+ 
         self.phi = np.float32(0.0)
-        lib_path = os.path.join("/home/user/ros2_ws/src/observer/matlab/codegen/lib/vehicle_dynamics_numeric", 'libvehicle_dynamics.so')
-        self.lib = ctypes.CDLL(lib_path)
 
-        self.lib.vehicle_dynamics_numeric.argtypes = [
-            ctypes.POINTER(ctypes.c_double), # state_obs (6x1)
-            ctypes.c_double,                 # Fx (scalar)
-            ctypes.c_double,                 # Mz (scalar)
-            ctypes.POINTER(ctypes.c_double), # dot_x_num output (6x1)
-            ctypes.POINTER(ctypes.c_double), # J_x_num output (6x6 -> 36 flat)
-            ctypes.POINTER(ctypes.c_double), # h_num output (6x1)
-            ctypes.POINTER(ctypes.c_double)  # J_h_num output (6x6 -> 36 flat)
-        ]
+
 
     def get_mass_properties(self):
         """
@@ -109,40 +103,49 @@ class robot:
         return total_mass, Ix, Iz
 
 
-    def getFurtherParameterFromUrdf(self, L, delta):
-         self.L = L
-         self.delta = delta
+    def computeJacobian(self):
+        
+        pinocchio.forwardKinematics(
+            self.model,
+            self.data,
+            self.q
+        )
+ 
+        pinocchio.computeJointJacobians(self.model, self.data, self.q)
+        
+        pinocchio.updateFramePlacements(
+            self.model,
+            self.data
+        )
+
+        frame_name = "left_wheel_axis4_1"
+        frame_id = self.model.getFrameId(frame_name)
+        #print(self.q)
+
+        J = pinocchio.computeFrameJacobian(
+            self.model,
+            self.data,
+            self.q,
+            frame_id,
+            pinocchio.ReferenceFrame.LOCAL_WORLD_ALIGNED
+        )
 
 
 
-    def calculate_dynamics(self, state, Fx, Mz, use_dist, dt):
-            """Wrapper to safely feed numpy arrays straight into the raw C memory blocks."""
-            # Ensure data arrays are contiguous float64 types for C compatibility
-            in_obs = np.ascontiguousarray(state, dtype=np.float64)
 
-            # Allocate empty output buffers for the C function to write into
-            dot_x = np.zeros(6, dtype=np.float64)
-            J_x   = np.zeros(36, dtype=np.float64)
-            h     = np.zeros(6, dtype=np.float64)
-            J_h   = np.zeros(36, dtype=np.float64)
+    def joint_states_callback(self, joint_msg):
 
-            # Invoke the native C function execution loop
-            self.lib.vehicle_dynamics_numeric(
-                in_obs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                ctypes.c_double(Fx),
-                ctypes.c_double(Mz),
-                dot_x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                J_x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                h.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                J_h.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
-            )
+        for name, position in zip(joint_msg.name, joint_msg.position):
+            joint_id = self.model.getJointId(name)
 
-            if(use_dist):
-                 dot_x += np.sin(2*np.pi*0.5*dt)
-                 dot_x[-1] = 0.8*np.sin(2*np.pi*0.05*dt)
-            
-            # Reshape flat 1D output buffers back into proper 2D matrices
-            return dot_x, J_x.reshape((6, 6), order='F'), h, J_h.reshape((6, 6), order='F') 
+            if joint_id == 0:
+                continue
+
+            idx_q = self.model.joints[joint_id].idx_q
+
+            self.q[idx_q] = position
+        
+ 
 
     def dynamics(self, state, Fx, Mz, add_disturb):
         """

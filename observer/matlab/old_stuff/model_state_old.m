@@ -2,8 +2,6 @@ clear; clc;
 
 compile_with_dist = false;
 
-
-
 % 1. Initialize variables explicitly (Only what the observer tracks!)
 phi   = sym('phi', 'real');
 wx    = sym('wx', 'real');
@@ -11,6 +9,9 @@ vy    = sym('vy', 'real');
 wz    = sym('wz', 'real');
 vx    = sym('vx', 'real');
 phi_u = sym('phi_u', 'real'); % Estimated input bias/road bank offset 
+% delta    = sym('delta', 'real');
+% theta    = sym('theta', 'real');
+% psi    = sym('psi', 'real');
 
 Fx    = sym('Fx', 'real');
 Mz    = sym('Mz', 'real');
@@ -19,10 +20,16 @@ Mz    = sym('Mz', 'real');
 % Pure 6-state Observer Vector
 state_obs = [phi; wx; vy; wz; vx; phi_u]; 
 % Physical Parameters
-m = 12809.162180730276; Ix = 4423.849628639999; Iz = 35308.58917090647; C_alpha = 300e2;
-%syms m Ix Iz C_alpha real
-Cr = 200000.0; Kr = 800000; g = -9.81; h_com = 1;
+m = 12809.162180730276; Ix = 4423.849628639999; Iz = 35308.58917090647;
+C_alpha = 350e2;
 
+%syms m Ix Iz C_alpha real
+Cr = 200000.0; Kr = 800000; g = -9.81;
+CoM_z = 2.0832863727326365;
+wheel_radius = 0.5645;
+h_com = CoM_z - wheel_radius;
+
+velocity_limit = 1.5;
 
 % Tire slip angles & total lateral force calculations
 L = [3.65, 1.75, 2.0, 3.39];
@@ -39,32 +46,58 @@ alpha(2) = delta_2 - (vy + L(2) * wz) / vx_lim;
 alpha(3) = - (vy - L(3) * wz) / vx_lim;
 alpha(4) = - (vy - L(4) * wz) / vx_lim;
 
-F = C_alpha * alpha;
-F_lateral_total = F(1) * cos(delta_1) + F(2) * cos(delta_2) + F(3) + F(4);
-tire_yaw_moment = (F(1) * cos(delta_1) * L(1) + F(2) * cos(delta_2) * L(2) - F(3) * L(3) - F(4) * L(4));
+F_sat = C_alpha * alpha;
+% N = m*9.81;
+% mu2_gz = 0.45;
+% F_max = N * mu2_gz;  
+% F_sat = F_max * tanh(F / F_max);
+
+F_lateral_total = F_sat(1) * cos(delta_1) + F_sat(2) * cos(delta_2) + F_sat(3) + F_sat(4);
+tire_yaw_moment = (F_sat(1) * cos(delta_1) * L(1) + F_sat(2) * cos(delta_2) * L(2) - F_sat(3) * L(3) - F_sat(4) * L(4));
 
 % phi total angle -> incorpora il disturbo stradale
 % (phi- phi_u) -> orientamento delle sospensioni
 
-dist = (use_dist == 1) * 5;
+% use_dist = sym("use_dist", "real");
+% dist = (use_dist == 1) * 5;
+% dphi_u = (use_dist == 1) * sin(2*pi*70);
+
+dist = 0;
+
+total_len = L(1) + L(4); %tot len
+
+% Kinematics
+% S = total_len / tan(delta);
+% beta = atan(L(4) * tan(delta) / total_len);
+% 
+% R = S / cos(beta);
+% theta_dot =  vx / R;
+% 
+% vy =  vx * sin(theta + beta);
+% dot_delta = psi;
 
 % Accelerations
 dvx = Fx / m + vy * wz ;
 dvy = -vx * wz + (F_lateral_total) / m;
-dot_wx = (m * dvy * h_com + m * g * sin(phi) - Cr * wx - Kr * (phi - phi_u)) / Ix + dist;
+dot_wx = (m * (-vx * wz + (F_lateral_total) / m) * h_com + m * g * sin(phi) - Cr * wx - Kr * (phi - phi_u)) / Ix + dist;
 dot_wz = (Mz + tire_yaw_moment) / Iz;
 dphi = wx;
-dphi_u = (use_dist == 1) * sin(2*pi*70);
+dphi_u = 0;
+
 
 % Remapped State Derivative Vector (6x1 matching state_obs layout)
 dot_x = [dphi; dot_wx; dvy; dot_wz; dvx; dphi_u];
 
 % 3. Modeling Output / Measurement Matrix h(x)
-distance_from_CoM = [0.5; 0.5; 0.5];
+distance_from_CoM = [0.0; 0.0; 0.0];
 dot_omega = [dot_wx; 0; dot_wz];
 omega = [wx; 0; wz];
 transport_term = cross(dot_omega, distance_from_CoM) + cross(omega, cross(omega, distance_from_CoM));
+
 acc_y_measured = dvy - transport_term(2); 
+
+
+acc_y_measured = acc_y_measured + vx*wz;
 
 h = [phi; acc_y_measured; wx; dot_wx; wz; vx];
 
@@ -73,7 +106,7 @@ J_x = jacobian(dot_x, state_obs);
 J_h = jacobian(h, state_obs);
  
 
-% ==========================================
+%==========================================
 % 4. NUMERIC FUNCTION EXPORT
 % ==========================================
 just_six_states = 1;
@@ -82,7 +115,8 @@ if(compile_with_dist)
     vars_input = {state_obs, Fx, Mz, use_dist};
 else
     % Assuming you have an 8-state vector and an extra input vector for the alternate plant
-    vars_input = {state_obs, Fx, Mz}; 
+    %vars_input = {state_obs, Fx, Mz, delta, theta, psi}; 
+    vars_input = {state_obs, Fx, Mz};  
 end
 
 matlabFunction(dot_x, J_x, h, J_h, 'File', 'vehicle_dynamics_numeric', ...
@@ -104,7 +138,12 @@ cfg.TargetLang = 'C';
 
 % Run codegen with the config object Without -args, codegen will throw an error and refuse to build. It has no way of guessing whether your plant state vector has 8 elements, 80 elements, or 8,000 elements.
 if(just_six_states)
-    codegen vehicle_dynamics_numeric -args {zeros(6, 1), 0.0, 0.0, logical(0),} -config cfg -report
+    if(compile_with_dist)
+        codegen vehicle_dynamics_numeric -args {zeros(6, 1), 0.0, 0.0, logical(0),} -config cfg -report
+    else
+        %codegen vehicle_dynamics_numeric -args {zeros(6, 1), 0.0, 0.0, 0.0, 0.0, 0.0} -config cfg -report
+        codegen vehicle_dynamics_numeric -args {zeros(6, 1), 0.0, 0.0} -config cfg -report
+    end
 else
     codegen vehicle_dynamics_numeric -args {zeros(8, 1), zeros(6, 1), 0.0, 0.0} -config cfg -report
 end

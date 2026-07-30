@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-import sys
-import argparse
-
-# 1. Parse command line arguments before ROS starts
-parser = argparse.ArgumentParser(description="Truck State Observer Node")
-parser.add_argument('--num-states', type=int, default=6, choices=[6, 8],
-                    help='Number of system states to observe (6 or 8)')
-# Extract our custom args while leaving ROS internal arguments intact
-parsed_args, ros_args = parser.parse_known_args()
-num_states = parsed_args.num_states
-
 import rclpy
 from rclpy.node import Node
 
@@ -21,31 +10,26 @@ import tf2_ros
 from tf_transformations import quaternion_matrix
 
 from .gazebo_model import GazeboCallback
-from . import robot
+from observer.model import dynamic_model 
 from observer.utils.data_plotter import DataPlotter
-
-if num_states==6:
-    from observer.utils.states import obs_state as s
-else:
-    from observer.utils.states import state as s
+from observer.utils.states import enum_obs_state, enum_outputs
 
 from geometry_msgs.msg import Twist
-
 
 from scipy.spatial.transform import Rotation as R
 from rclpy.callback_groups import ReentrantCallbackGroup
 from std_msgs.msg import Float64MultiArray
 from rcl_interfaces.srv import GetParameters
 
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import JointState
 
-"""dot_x1 = x2                      x = [x1] -> [x,y,roll,yaw]
-    dot_x2 = f(x,u)                     [x2] -> [vx,vy,dot_roll,dot_yaw]"""
 class TruckStateObserver(Node):
 
     def __init__(self):
         super().__init__('truck_state_observer')
 
-        self.group = ReentrantCallbackGroup()
+        self.parallel = ReentrantCallbackGroup()
 
         self.declare_parameter('scale_tanh', 10.0)
         self.scale_tanh = self.get_parameter('scale_tanh').value
@@ -53,322 +37,315 @@ class TruckStateObserver(Node):
         self.declare_parameter("des_vel_x", 5.0)
         self.des_vel_x = self.get_parameter('des_vel_x').value
 
-        self.declare_parameter("des_omega_z", 0.5) #giving a desired angular vel prevent the velocity to reach a steady state
+        self.declare_parameter("des_omega_z", 0.4) #giving a desired angular vel prevent the velocity to reach a steady state
         self.des_omega_z = self.get_parameter('des_omega_z').value
         
         # Friend Function 
-        self.truck = robot.robot()
+        self.truck = dynamic_model.DynamicModel()
         
         self.Gazebo = GazeboCallback(self)
         
         self.plotter = DataPlotter("results")
 
-        self.UseGazeboSim = False
         if self.get_parameter("use_sim_time").value:
             self.fixed_dt = 1e-3 #lo rendi abbastanza basso da usare il tempo di gazebo
-            self.UseGazeboSim = True
             
-            # self.timer_gazebo = self.create_timer(
-            #     self.fixed_dt, 
-            #     self.GazeboControl,
-            #     callback_group=self.group
-            # )
+            self.timer_gazebo = self.create_timer(
+                self.fixed_dt, 
+                self.GazeboControl,
+                callback_group=self.parallel
+            )
 
-            # self.gz_pub_ = self.create_publisher(
-            #     Twist,
-            #     '/cmd_vel',
-            #     10
-            # )
+            self.gz_pub_ = self.create_publisher(
+                Twist,
+                '/cmd_vel',
+                10
+            )
 
-            # # To get the parameter from the truck_controller
-            # self.steering_angle_sub = self.create_subscription(
-            #     Float64MultiArray,
-            #     '/steering_controller/commands',
-            #     self.steering_callback,   # callback function
-            #     10,
-            #     callback_group=self.group
-            # )
+            self.joint_sub = self.create_subscription(
+                JointState,
+                '/joint_states',
+                self.truck.joint_states_callback,
+                qos_profile_sensor_data,
+                callback_group=self.parallel
+            )
 
-            # self.L = np.zeros(4)
-            # self.param_client = self.create_client(
-            #     GetParameters,
-            #     '/truck_kinematic_control/get_parameters'
-            # )
+            self.imu_sub = self.create_subscription(
+                Imu,
+                '/imu/data', #50Hz
+                self.Gazebo.imu_callback,
+                qos_profile_sensor_data,
+                callback_group=self.parallel
+            )
 
-            # request = GetParameters.Request()
-            # request.names = ['L1', 'L2', 'L3', 'L4']
-            # future = self.param_client.call_async(request)
-            # future.add_done_callback(self.get_L_parameters)
-
-            # self.imu_sub = self.create_subscription(
-            #     Imu,
-            #     '/imu/data', #50Hz
-            #     self.Gazebo.imu_callback,
-            #     10,
-            #     callback_group=self.group
-            # )
-
-            # self.odom_sub = self.create_subscription(
-            #     Odometry,
-            #     '/odometry', #20Hz
-            #     self.Gazebo.odom_callback,
-            #     10,
-            #     callback_group=self.group
-            # )
+            self.odom_sub = self.create_subscription(
+                Odometry,
+                '/odometry', #20Hz
+                self.Gazebo.odom_callback,
+                qos_profile_sensor_data,
+                callback_group=self.parallel
+            )
         else:
             self.fixed_dt = 1e-2 #The observer should run at 10ms
-
-        self.delta = np.zeros(2, dtype='float32')
-        self.rotation_body2world = np.zeros((3,3), dtype='float32')
         
-        # State terms
+        num_states = 6
+        num_outputs = 6
+
+        # MODEL terms
         self.state = np.zeros(num_states, dtype=np.float64)
-        self.output = np.zeros(6, dtype="float32")
+        self.output = np.zeros(num_outputs, dtype="float32")
 
-        # Observer terms
-        self.observed_state = np.zeros(num_states, dtype="float32")
-        
-        self.observed_output = np.zeros(6, dtype="float32")
-        
-        self.jacobian = np.zeros((6,6), dtype='float32')
+        # OBSERVER terms
+        self.observed_state = np.zeros(num_states, dtype=np.float64)
+        self.observed_output = np.zeros(num_outputs, dtype="float32")
 
-        # PID Terms
-        self.e_int = np.zeros(2,dtype="float32")
-        
-        self.previous_e = np.zeros(2,dtype="float32")
+        # GAZEBO terms
+        self.gazebo_state = np.zeros(num_states, dtype=np.float64)
+        self.gazebo_output = np.zeros(num_outputs, dtype="float32")
+
+
+        # Jacobian of the output vector field
+        self.jacobian = np.zeros((num_outputs, num_states), dtype='float32')
 
         # The controller frequency will always depend on this, and so the observer if it runs in the callback
         self.timer_observer = self.create_timer(
             self.fixed_dt, 
             self.ModelSimulator,
-            callback_group=self.group
+            #callback_group=self.group
         )
 
         self.counter = 0
-        self.early = None
 
         self.time_data = []
         self.output_data = []
-        self.observed_data = []
+        self.state_data = []
+        self.observed_state_data = []
+        self.observed_output_data = []
+        self.gazebo_state_data = []
+        self.gazebo_output_data = []
         self.sim_time = 0.0
+
+        self.previous_time = None
+        self.jacobian_reduced = False
         self.w = np.zeros(5, dtype=np.float64)
-        self.previous_time = 0.0
-        
+
+        # Differentiator state
+        self.omega_x_obs = np.float32(0.0)
+        self.dot_omega_x_obs = np.float32(0.0) 
+
+        self.zita2 = np.float32(0.0)
+        self.zita3 = np.float32(0.0)
+
+        self.dot_omega_x_obs_prev = np.float32(0.0) 
+
+        self.phi_s_data = []
+
+
     def GazeboControl(self):
         msg = Twist()
         # Linear velocity (m/s)
         msg.linear.x = self.des_vel_x
         msg.linear.y = 0.0
         msg.angular.z = self.des_omega_z
-
+        
         self.gz_pub_.publish(msg)
 
 
     def ModelSimulator(self):
-        now = self.get_clock().now().nanoseconds * 1e-9
-        elapsed_time = now - self.previous_time
-        self.previous_time = self.get_clock().now().nanoseconds * 1e-9
+        
+        #self.print_time()
+
+        #self.truck.computeJacobian()
+
         dt = self.fixed_dt
-        u = self.PdController(dt = dt)
+
+        if self.get_parameter("use_sim_time").value:
+
+            state, output = self.Gazebo.get_state_output()
+
+            self.gazebo_state = state.copy()
+            self.gazebo_output = output.copy()
+
+            self.gazebo_state_data.append(state.copy())
+            self.gazebo_output_data.append(output.copy())
+        
+
+        # Model Dynamic
+        u = self.truck.PdController(self.state, self.des_vel_x, self.des_omega_z, dt)
         Fx, Mz = u
 
-        dot_observed_state = None
+        dot_x, J_x, h_meas, _ = self.truck.calculate_real_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
+        
+        self.state += dot_x*dt
+       
+        self.output = h_meas
+        self.output[[enum_outputs.WX, enum_outputs.WZ]] = self.Gazebo.add_white_noise_gyro(h_meas[[enum_outputs.WX, enum_outputs.WZ]])
+        self.output[[enum_outputs.ACC_Y]] = self.Gazebo.add_white_noise_acceleration(h_meas[enum_outputs.ACC_Y])
+        
 
-        if(num_states == 8):
-            if(not self.UseGazeboSim):
-                #self.state += self.truck.dynamics(self.state, Fx, Mz, add_disturb = True)*dt
-                self.state = self.rk4_step(self.state, Fx, Mz, dt, dist = True)
-            else:
-                self.state = self.Gazebo.gazebo_full_state
+        self.state_data.append(self.state.copy())
+        self.output_data.append(self.output.copy())
 
-            dot_observed_state = self.truck.dynamics(self.observed_state, Fx, Mz, add_disturb = False)
-            
-            self.HighOrderObserver(dot_observed_state, dt)
 
-        else:
-            if(not self.UseGazeboSim):
+        # Observer's Dynamic
+        u = self.truck.PdController(self.observed_state, self.des_vel_x, self.des_omega_z, dt)
+        Fx, Mz = u
 
-                dot_x, J_x, h_meas, _ = self.truck.calculate_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
-                
-                self.state += dot_x*dt
+        dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_obs_dynamics(self.observed_state, Fx, Mz)
 
-                self.output = h_meas
+        #Remove the row of the Jacobian corresponding to h(x_6) = vx
+        matrix_reduced = np.delete(J_h, enum_outputs.VX, axis=0)
+        matrix_reduced = np.delete(matrix_reduced, enum_obs_state.VX, axis=1)
+        self.jacobian = matrix_reduced
+        # Compute Jacobian correction
+        self.observed_output = h_hat_meas
+        self.JacobianObserver(dot_observed_state, self.output.copy(), dt)   
 
-            else:
+        self.observed_state_data.append(self.observed_state.copy())
+        self.observed_output_data.append(self.observed_output.copy())
 
-                self.output = self.Gazebo.gazebo_output
-                self.state = self.Gazebo.gazebo_states
-                #self.truck.getFurtherParameterFromUrdf(self.L, self.delta)
 
-            dot_observed_state, _, h_hat_meas, J_h = self.truck.calculate_dynamics(self.observed_state, Fx, Mz, False, dt+self.sim_time)
-
-            # Remove the 6th row (index 5) along axis 0
-            matrix_reduced = np.delete(J_h, 5, axis=0)
-            # Remove the 5th column (index 4) along axis 1
-            matrix_reduced = np.delete(matrix_reduced, 4, axis=1)
-
-            self.jacobian = matrix_reduced
-
-            self.observed_output = h_hat_meas
-            self.JacobianObserver(dot_observed_state, dt)   
-            # For the observer, to use the Urdf parameter for L and delta and not the one defined in simulink
-            
         self.sim_time += dt
         self.time_data.append(self.sim_time)
-        self.output_data.append(self.state.copy())
-        self.observed_data.append(self.observed_state.copy())
 
 
-
-    def HighOrderObserver(self, dot_observed_state, dt):
-
-        p = 0.05
+    def JacobianObserver(self, dot_observed_state, real_output, dt):
         
-        estimated_error = self.state[:4] - self.observed_state[:4]
-
-        alpha = 2*np.abs(dot_observed_state[:4]) + 150.0
-        
-        lambdaa = np.sqrt(2/(alpha - 2*np.abs(dot_observed_state[:4])))* ( (alpha + 2*np.abs(dot_observed_state[:4]))*(1+p))/(1-p) + 10
-        
-        root_abs_error = np.sqrt(np.abs(estimated_error))
-        
-        correction_term = lambdaa*root_abs_error*np.tanh(self.scale_tanh*estimated_error)
-
-        dot_observed_state[:4] = dot_observed_state[:4] + correction_term
-        dot_observed_state[4:] = dot_observed_state[4:] + alpha*np.tanh(self.scale_tanh*estimated_error)
-        
-        self.observed_state += dot_observed_state*dt
-        
-        st = self.state
-        obs = self.observed_state
-        self.counter+=1
-        if self.counter % 100 == 0:
-            self.get_logger().info(
-                f"real (estimated)\n"
-                f"Pos : x={st[s.X]:7.3f} ({obs[s.X]:7.3f})  "
-                f"y={st[s.Y]:7.3f} ({obs[s.Y]:7.3f})\n"
-                f"Ang : r={st[s.ROLL]:7.3f} ({obs[s.ROLL]:7.3f})  "
-                f"ψ={st[s.YAW]:7.3f} ({obs[s.YAW]:7.3f})\n"
-                f"Vel : vx={st[s.VX]:7.3f} ({obs[s.VX]:7.3f})  "
-                f"vy={st[s.VY]:7.3f} ({obs[s.VY]:7.3f})\n"
-                f"Rate: wx={st[s.WX]:7.3f} ({obs[s.WX]:7.3f})  "
-                f"wz={st[s.WZ]:7.3f} ({obs[s.WZ]:7.3f})\n"
-                f"dt={dt:.4f}"
-            )
-    
-    def JacobianObserver(self, dot_observed_state, dt):
-
         J_inv = np.linalg.inv(self.jacobian)
 
         alpha = 50
-
         beta = 1.5
 
-        estimated_error = self.output - self.observed_output
-        # Take the estimate error on the first 5 output (I am excluding the vx)
+        estimated_error = real_output - self.observed_output
         estimated_error = estimated_error[:5]
 
         root_abs_error = np.sqrt(np.abs(estimated_error))
 
         # 2. Overwrite just the specific indices using vectorized assignment
-        root_abs_error[2] = np.abs(estimated_error[2]) ** (2/3)
-        root_abs_error[3] = np.abs(estimated_error[3]) ** (2/3)
+        root_abs_error[enum_outputs.DOT_WX] = np.abs(estimated_error[enum_outputs.WX]) ** (1/3)
 
         sign_error = np.tanh(self.scale_tanh*estimated_error)
 
         self.w += beta*sign_error
-        
+        self.w[[enum_outputs.DOT_WX]] = 0.0
+    
         correction_term = alpha * root_abs_error * sign_error + self.w
 
         #Remove the 5th elements
-        dot_observed_state_reduced = np.delete(dot_observed_state, 4)
+        dot_observed_state_reduced = np.delete(dot_observed_state, enum_obs_state.VX)
 
         state_rate_reduced = dot_observed_state_reduced + J_inv @ correction_term
         # Re-insert a 0.0 value at index 4 so it matches the 6-element layout of self.observed_state
 
-        state_rate_6d = np.insert(state_rate_reduced, 4, 0.0)
-
-        self.observed_state += state_rate_6d * dt
-
-        self.observed_state[4] = self.output[5]
-
-        st = self.output
-        obs = self.observed_state
-        self.counter+=1
-        if self.counter % 100 == 0:
-            self.get_logger().info(
-            f"real (estimated)\n"
-            f"Ang : r={st[s.ROLL]:7.3f} ({obs[s.ROLL]:7.3f})\n "
-            f"Vel : vx={st[s.VX]:7.3f} ({obs[s.VX]:7.3f}) "
-            f"vy={st[s.VY]:7.3f} ({obs[s.VY]:7.3f})\n"
-            f"Rate: wx={st[s.WX]:7.3f} ({obs[s.WX]:7.3f})  "
-            f"wz={st[s.WZ]:7.3f} ({obs[s.WZ]:7.3f})\n"
-            f"dt={dt:.4f}"
-        )
-
-
-    def PdController(self, dt):
-
-        # if(not self.UseGazeboSim):
-        #     roll = self.state[s.ROLL]
-        #     pitch = 0.0
-        #     yaw = self.state[s.YAW]
-
-        #     self.rotation_body2world = R.from_euler(
-        #         'xyz',
-        #         [roll, pitch, yaw]
-        #     ).as_matrix().T
-
-        Kp = np.array([100000, 2000000])
-        Ki = np.array([100, 100.0])
-        Kd = np.array([100, 10])
-
-        vx_des, _, des_omega_z =  np.array([self.des_vel_x, 0, self.des_omega_z])
+        state = np.insert(state_rate_reduced, 4, 0.0)
         
-        control_error = np.array([
-            vx_des - self.state[s.VX],
-            des_omega_z - self.state[s.WZ]
-        ])
+        self.observed_state += state * dt
+        self.observed_state[enum_obs_state.VX] = real_output[enum_outputs.VX]
+        
+        self.STDifferentiator(real_output[enum_outputs.WX], dt)
 
-        derivative_term = Kd*((control_error - self.previous_e)/dt)
-        integral_term = Ki*self.e_int
+        self.observed_output[enum_outputs.DOT_WX] = self.dot_omega_x_obs
 
-        u = Kp*control_error + integral_term  
-    
-        self.previous_e = control_error
-        self.e_int += control_error*dt
+        phi_s = self.observed_state[enum_obs_state.ROLL] - self.observed_state[enum_obs_state.PHI_U]
+        self.phi_s_data.append(phi_s)
+        self.print()
 
-        return u
-    
 
-    def rk4_step(self, state, Fx, Mz, dt, dist):
 
-        k1 = self.truck.dynamics(state, Fx, Mz, dist)
-        k2 = self.truck.dynamics(state + 0.5*dt*k1, Fx, Mz, dist)
-        k3 = self.truck.dynamics(state + 0.5*dt*k2, Fx, Mz, dist)
-        k4 = self.truck.dynamics(state + dt*k3, Fx, Mz, dist)
+    """To copute the transportation term I correctly need an estimation of dot_omega"""
+    def STDifferentiator(self, y, dt):
+        
 
-        return state + dt/6.0 * (k1 + 2*k2 + 2*k3 + k4)
+        error = self.omega_x_obs - y
+
+        lambda1 = 25
+        lambda2 = 100 
+
+        # lambda1 = 1.5*np.sqrt(L)
+        # lambda2 = 1.1*L
+
+        # smooth sign (replace with np.sign if chattering is acceptable)
+        s = np.tanh(self.scale_tanh * error)
+
+        # observer equations
+        dot_z1 =  - 10 * np.sqrt(np.abs(error)) * s + self.zita2
+        zita2_dot = -5 * s + self.zita3
+        self.omega_x_obs += dot_z1 * dt
+        self.zita2 += zita2_dot * dt
+
+        dot_z2 = -lambda1 * np.sqrt( np.abs( self.dot_omega_x_obs - self.zita2)) *np.tanh(self.scale_tanh * (self.dot_omega_x_obs - self.zita2)) + self.zita3
+        zita3_dot = -lambda2 * np.tanh(self.scale_tanh * (self.dot_omega_x_obs - self.zita2))
+        self.dot_omega_x_obs += dot_z2*dt
+        self.zita3 += zita3_dot*dt
+        # integrate
+
 
 
 
     def AtEnd(self):
         # Perché i vari thread potrebbero non restare sincronizzati
         n = min(len(self.time_data),
+        len(self.state_data),
         len(self.output_data),
-        len(self.observed_data))
+        len(self.observed_state_data),
+        len(self.observed_output_data)
+        )
 
-        self.plotter.PlotAtEnd(self.output_data[:n], self.observed_data[:n], self.time_data[:n])
+        self.plotter.PlotAtEnd(self.state_data[:n],  self.output_data[:n],
+                            self.observed_state_data[:n], self.observed_output_data[:n],
+                            self.gazebo_state_data[:n], self.gazebo_output_data[:n],
+                            self.time_data[:n], self.phi_s_data[:n])
+
+
+
+    def print(self):
+
+        st = self.state
+        obs = self.observed_state
+        self.counter+=1
+
+
+        if self.counter % (1/self.fixed_dt) == 0:
+            self.get_logger().info(
+            f"real (estimated)\n"
+            f"Ang : r={st[enum_obs_state.ROLL]:7.3f} ({obs[enum_obs_state.ROLL]:7.3f})\n "
+            f"Vel : vx={st[enum_obs_state.VX]:7.3f} ({obs[enum_obs_state.VX]:7.3f}) "
+            f"vy={st[enum_obs_state.VY]:7.3f} ({obs[enum_obs_state.VY]:7.3f})\n"
+            f"Rate: wx={st[enum_obs_state.WX]:7.3f} ({obs[enum_obs_state.WX]:7.3f})  "
+            f"wz={st[enum_obs_state.WZ]:7.3f} ({obs[enum_obs_state.WZ]:7.3f})\n"
+            # f"dot_WX={real_output[enum_outputs.DOT_WX]:7.3f} ({self.dot_omega_x_obs:7.3f})\n"
+            # f"differentiator_wx={real_output[enum_outputs.WX]:7.3f} ({self.omega_x_obs:7.3f})\n"
+        )
+
+
+    def print_time(self):
+
+        now = self.get_clock().now()
+
+        if self.previous_time is None:
+
+            self.previous_time = now
+
+            return
+        
+        dt = (now - self.previous_time).nanoseconds * 1e-9
+
+        self.previous_time = now
+
+        print(dt)
 
 
 def main(args=None):
 
     rclpy.init(args=args)
+    """Attenzione, perché con il MultiThreadExecutor i tempi delle chiamate delle callback per qualche motivo non sono più rispettati"""
+    use_multiThread = False
 
     node = TruckStateObserver()
+
     try:
-        if node.UseGazeboSim:
-            executor = rclpy.executors.MultiThreadedExecutor()
+        if use_multiThread:
+            executor = rclpy.executors.MultiThreadedExecutor(num_threads=4)
             executor.add_node(node)
             executor.spin()  # Handled by the outer try-except now
         else:
@@ -380,7 +357,7 @@ def main(args=None):
         
     finally:
         # Clean up the executor if it was initialized
-        if node.UseGazeboSim and 'executor' in locals():
+        if use_multiThread and 'executor' in locals():
             executor.shutdown()
             
         # Run your custom end routine and destroy the node
