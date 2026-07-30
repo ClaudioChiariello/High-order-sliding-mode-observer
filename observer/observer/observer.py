@@ -9,7 +9,7 @@ from nav_msgs.msg import Odometry
 import tf2_ros
 from tf_transformations import quaternion_matrix
 
-from .gazebo_model import GazeboCallback
+
 from observer.model import dynamic_model 
 from observer.utils.data_plotter import DataPlotter
 from observer.utils.states import enum_obs_state, enum_outputs
