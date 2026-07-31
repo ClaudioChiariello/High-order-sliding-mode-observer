@@ -22,20 +22,30 @@ def convert_wheels_to_cylinders(mjcf_root, wheel_half_width="0.18"):
         # Target wheel collision geoms
         if any(keyword in geom_name for keyword in wheel_keywords) and "collision" in geom_name:
             # Change geometry type to cylinder
-            geom.set("type", "cylinder")
+            # geom.set("type", "cylinder")
             
-            # Extract current radius from size (e.g., "0.5645")
-            current_size = geom.get("size", "0.5645").split()
-            radius = current_size[0]
+            # # Extract current radius from size (e.g., "0.5645")
+            # current_size = geom.get("size", "0.5645").split()
+            # radius = current_size[0]
             
-            # Cylinder size requires: "radius half_width"
-            geom.set("size", f"{radius} {wheel_half_width}")
+            # # Cylinder size requires: "radius half_width"
+            # geom.set("size", f"{radius} {wheel_half_width}")
             
-            # Rotate cylinder's local Z axis to align with joint's Y axis
-            geom.set("quat", "0.707107 0.707107 0 0")
+            # # Rotate cylinder's local Z axis to align with joint's Y axis
+            # geom.set("quat", "0.707107 0.707107 0 0")
+            
+            # geom.set("quat", "0.707107 0.707107 0 0")
 
-            geom.set("solimp", "0.9 0.95 0.001 0.5 2")  # Gives tire elastic compliance
-            geom.set("solref", "0.02 1")
+            geom.set("solimp", "0.9 0.95 0.001 0.5 2")  # default 
+            # Il primo termine è il tempo di risposta del sistema a deformazioni. Quanto più è grande, tanto piu' il sistema impiegherà per rispondere a deformazioni. 
+            # Tanto maggiore e', tanto più sara' soffice il corpo a contatto.
+            # Se quindi lo alzo, durante la curva le ruote esterne penetrano di più e le ruote posteriori interne non saranno piu' a contatto
+            geom.set("solref", "0.1 1") # Default "solref", "0.02 1"
+            geom.set("margin", "0.1")  # e.g., 0.01 meters (1 cm contact detection buffer)
+            geom.set("gap", "0.005")
+            # condim="4" enables 3D contact (tangential frictional + normal-forces) but with no torsional-friction
+            geom.set("condim", "3") #just tangential friction forces and normal, I don't need torsional friction
+
 
 def set_mujoco_solver(mjcf_root, solver_type="Newton"):
     """
@@ -115,8 +125,7 @@ def update_wheel_friction(mjcf_root):
         
         # Target wheel collision geoms specifically
         if any(keyword in geom_name for keyword in wheel_keywords):
-            # condim="4" enables 3D contact + torsional friction (twist resistance)
-            geom.set("condim", "4")
+           
             geom.set("contype","2")  #Setto un contype e conaffinity del link delle ruote in modo che possa essere compatibile solo con quello del terreno, ma non con quello del base_link
             geom.set("conaffinity", "1")
  
