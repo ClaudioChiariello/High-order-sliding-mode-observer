@@ -43,20 +43,13 @@
 #include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp>
 #include <mujoco_ros2_control_msgs/msg/body_wrench.hpp>
 
-#include <mujoco_ros2_control_msgs/msg/contact_forces.hpp>
-
-
-#include "nav_msgs/msg/odometry.hpp"
-#include "geometry_msgs/msg/transform_stamped.hpp"
-#include "tf2_ros/transform_broadcaster.hpp"
-#include <sensor_msgs/msg/imu.hpp>
 
 
 namespace mujoco_ros2_control
 
 
 {
-class GetSimData;
+
 
 /**
  * @brief ROS 2-based container for the mujoco Simulate application.
@@ -132,7 +125,7 @@ public:
    * This initializes the Simulate app and starts the UI thread in the background (if not
    * running headless). It also sets up required publishers and services using the provided node.
    */
-  bool initialize(rclcpp::Node::SharedPtr node, const std::string& model_path, const std::string& mujoco_model_topic,
+  virtual bool initialize(rclcpp::Node::SharedPtr node, const std::string& model_path, const std::string& mujoco_model_topic,
                   double sim_speed_factor, bool headless);
 
   /**
@@ -173,9 +166,6 @@ public:
   {
     return mj_model_;
   }
-
-  mjModel* getModel() const { return mj_model_; }
-  mjData* getData() const { return mj_data_; }
 
   std::recursive_mutex& getMutex() { return *sim_mutex_; }
 
@@ -296,6 +286,29 @@ public:
     return step_count_.load();
   }
 
+    virtual void publish_wrenches() = 0;
+
+    //void publish_actuator_wrenches() = 0;
+
+    virtual void print_all_joint_torques(const mjModel* m, mjData* d) = 0;
+
+    virtual void publish_odometry(int body_id, const mjModel* model, mjData* data) = 0;
+
+    virtual void getGroundContactWrench(int body_id, const mjModel* model, mjData* data) = 0;
+
+    virtual void publish_imu_data_kinematics(int body_id, const mjModel* model, mjData* data)=0;
+
+
+protected:
+  /**
+   * @brief Loops the physics simulation until asked to terminate.
+   */
+  virtual void physics_loop();
+
+  std::unique_ptr<mujoco::Simulate> sim_;
+
+  rclcpp::Node::SharedPtr node_;
+
 private:
 
   /**
@@ -314,8 +327,6 @@ private:
    */
   void publish_control_state();
 
-
-  void publish_wrenches();
   /**
    * @brief Refreshes the consumer-facing snapshot from `mj_data_`.
    *
@@ -325,10 +336,6 @@ private:
    */
   void refresh_data_snapshot();
 
-  /**
-   * @brief Loops the physics simulation until asked to terminate.
-   */
-  void physics_loop();
 
   /**
    * @brief Publish the current sim time to /clock.
@@ -357,7 +364,6 @@ private:
   rclcpp::Logger logger_ = rclcpp::get_logger("MujocoSimulation");
 
   // ROS node (owned by the HW interface, used here for services and clock publisher).
-  rclcpp::Node::SharedPtr node_;
 
   // System information
   std::string model_path_;
@@ -430,7 +436,7 @@ private:
   bool headless_{ false };
 
   // Primary simulate object
-  std::unique_ptr<mujoco::Simulate> sim_;
+  
 
   // Threads for rendering physics and the UI simulation
   std::thread physics_thread_;
@@ -476,71 +482,11 @@ private:
   // Callback into the HW interface to perform component-side reset bookkeeping.
   ResetCallback reset_callback_;
 
-  std::unique_ptr<GetSimData> getSimData_;
 };
 
 
 
-class GetSimData
-{
-public:
-    GetSimData(
-        MujocoSimulation* sim,
-        rclcpp::Node::SharedPtr node)
-        : sim_(sim), 
-        node_(node)
-    {
-        wrench_pub_ = node->create_publisher<mujoco_ros2_control_msgs::msg::BodyWrench>("/wrenches", 10);
-        wrenches_from_actuators_pub_ = node->create_publisher<mujoco_ros2_control_msgs::msg::BodyWrench>("/wrenches_from_actuators", 10);
 
-        imu_pub_ = node_->create_publisher<sensor_msgs::msg::Imu>("imu/data", 10);
-        contact_forces_pub_ = node->create_publisher<mujoco_ros2_control_msgs::msg::ContactForces>("/contact_forces", 10);
-
-        odom_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("/odom", 10);
-        tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(node);
-    }
-
-    void publish_wrenches();
-
-    bool getBodyVelocity(
-        const std::string& body_name,
-        mjtNum* lin,
-        mjtNum* ang,
-        bool world_frame = true);
-
-    void publish_actuator_wrenches();
-
-    void transform_world_to_body_frame(const mjtNum* R, const mjtNum* world_vel, mjtNum* body_vel);
-
-    void print_all_joint_torques(const mjModel* m, const mjData* d);
-
-    void publish_odometry(int body_id);
-
-    void getGroundContactWrench(int body_id);
-
-    void publish_imu_data_kinematics(int body_id);
-
-private:
-
-    MujocoSimulation* sim_;
-
-    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
-
-    rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
-
-    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-
-    rclcpp::Publisher<mujoco_ros2_control_msgs::msg::BodyWrench>::SharedPtr wrench_pub_;
-    rclcpp::Publisher<mujoco_ros2_control_msgs::msg::BodyWrench>::SharedPtr wrenches_from_actuators_pub_;
-
-    rclcpp::Publisher<mujoco_ros2_control_msgs::msg::ContactForces>::SharedPtr contact_forces_pub_;
-
-
-    rclcpp::Node::SharedPtr node_;
-
-    int count_ = 0;
-
-};
 
 
 }  // namespace mujoco_ros2_control

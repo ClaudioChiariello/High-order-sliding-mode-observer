@@ -139,7 +139,7 @@
       <param name="laserscan_topic">/scan</param>
     </sensor>
 
-    <sensor name="pose">
+    <!-- <sensor name="pose">
       <param name="mujoco_type">pose</param>
       <param name="mujoco_sensor_name">body</param>
 
@@ -151,7 +151,7 @@
       <state_interface name="orientation.y" />
       <state_interface name="orientation.z" />
       <state_interface name="orientation.w" />
-    </sensor>
+    </sensor> -->
 
 
 </ros2_control>

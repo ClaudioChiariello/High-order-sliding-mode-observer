@@ -18,7 +18,7 @@
  */
 
 #include "mujoco_ros2_control/mujoco_system_interface.hpp"
-
+#include "mujoco_ros2_control/truck_mujoco_simulation.hpp"
 #include <fmt/compile.h>
 #include <fmt/ranges.h>
 
@@ -356,7 +356,7 @@ MujocoSystemInterface::on_init(const hardware_interface::HardwareComponentInterf
       get_hardware_parameter_or(get_hardware_info(), "mujoco_model_topic", "/mujoco_robot_description");
 
   // Construct the simulation wrapper with the loaded parameters.
-  simulation_ = std::make_unique<MujocoSimulation>();
+  simulation_ = std::make_unique<mujoco_ros2_control_truck::GetSimData>();
   if (!simulation_->initialize(get_node(), model_path, mujoco_model_topic, sim_speed_factor, headless))
   {
     return hardware_interface::CallbackReturn::ERROR;
