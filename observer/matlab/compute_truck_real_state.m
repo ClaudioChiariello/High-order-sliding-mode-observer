@@ -30,7 +30,7 @@ function [model_state, dot_x, J_x, h, J_h] = compute_truck_real_state(p, s)
     
     %% 4. Derivate di Stato (Dinamica di Sistema)
     dvx    = s.Fx / p.m + s.vy * s.wz;
-    dvy    = -s.vx * s.wz + (F_lateral_total) / p.m;
+    dvy    = -s.vx * s.wz + p.g*sin(s.phi) (F_lateral_total) / p.m;
     dot_wz = (s.Mz + tire_yaw_moment) / p.Iz;
     dphi   = s.wx;
     dphi_u = 0;

@@ -1,6 +1,9 @@
 
 #include "mujoco_ros2_control/mujoco_simulation.hpp" 
-#include <mujoco_ros2_control_msgs/msg/contact_forces.hpp>
+
+#include "mujoco_ros2_control_msgs/msg/contact_pair.hpp"
+#include "mujoco_ros2_control_msgs/msg/contact_state.hpp"
+
 #include "nav_msgs/msg/odometry.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "tf2_ros/transform_broadcaster.hpp"
@@ -47,7 +50,7 @@ namespace mujoco_ros2_control_truck{
 
         void publish_imu_data_kinematics(int body_id, const mjModel* model, mjData* data);
 
-
+        double Paceika_model(const mjModel* model, const mjData* data, double * Fy);
 
     // protected:
     //     // Reimplement physics_loop to override the base class behavior
@@ -65,11 +68,15 @@ namespace mujoco_ros2_control_truck{
         rclcpp::Publisher<mujoco_ros2_control_msgs::msg::BodyWrench>::SharedPtr wrench_pub_;
         rclcpp::Publisher<mujoco_ros2_control_msgs::msg::BodyWrench>::SharedPtr wrenches_from_actuators_pub_;
 
-        rclcpp::Publisher<mujoco_ros2_control_msgs::msg::ContactForces>::SharedPtr contact_forces_pub_;
+        rclcpp::Publisher<mujoco_ros2_control_msgs::msg::ContactState>::SharedPtr contact_state_pub_;
 
         rclcpp::Node::SharedPtr custom_node_;
 
         int count_ = 0;
+
+        std::array<double, 3> body_lin_vel_ = {{0.0, 0.0, 0.0}};
+        
+        double heading_vel_ = 0;
 
     };
 }

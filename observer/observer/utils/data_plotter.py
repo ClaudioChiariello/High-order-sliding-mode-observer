@@ -69,10 +69,10 @@ class DataPlotter:
             gazebo=gz_out[:, enum_outputs.DOT_WX] if (show_gazebo and gz_out is not None) else None
         )
 
-        # 5. Lateral Velocity (VY)
+        # 5. Lateral Velocity (VY) 
         self.plot(
             time,
-            state[:, enum_obs_state.VY],
+            state[:, enum_obs_state.VY], #REMEMBER THAT IS NOT AN OUTPUT
             observed_state[:, enum_obs_state.VY], # Kept as observed_out to match your original configuration
             Title = "Lateral velocity Vy",
             ylabel="vy [m/s]",
@@ -111,7 +111,7 @@ class DataPlotter:
             gazebo=gz_out[:, enum_outputs.ROLL] if (show_gazebo and gz_out is not None) else None
         )
 
-        self.plot_just_one(
+        self.plot_just_model_var(
             time,
             phi_s,
             var_name = "phi_s",
@@ -145,7 +145,7 @@ class DataPlotter:
 
 
 
-    def plot_just_one(self, time, x, var_name, ylabel, filename):
+    def plot_just_model_var(self, time, x, var_name, ylabel, filename):
         plt.figure(figsize=(10, 6))
 
         # Core Plots

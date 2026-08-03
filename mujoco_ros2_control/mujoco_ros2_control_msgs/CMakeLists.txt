@@ -13,7 +13,8 @@ set(msg_files
   msg/ExternalWrench.msg
   msg/ExternalWrenchArray.msg
   msg/BodyWrench.msg
-  msg/ContactForces.msg
+  msg/ContactPair.msg
+  msg/ContactState.msg
 )
 
 set(srv_files

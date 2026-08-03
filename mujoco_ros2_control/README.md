@@ -1,92 +1,71 @@
-# MuJoCo ros2_control
+## Acknowledgements
 
-[![Rdev](https://build.ros2.org/job/Rdev__mujoco_ros2_control__ubuntu_noble_amd64/badge/icon)](https://build.ros2.org/job/Rdev__mujoco_ros2_control__ubuntu_noble_amd64/) [![Kdev](https://build.ros2.org/job/Kdev__mujoco_ros2_control__ubuntu_noble_amd64/badge/icon)](https://build.ros2.org/job/Kdev__mujoco_ros2_control__ubuntu_noble_amd64/) [![Jdev](https://build.ros2.org/job/Jdev__mujoco_ros2_control__ubuntu_noble_amd64/badge/icon)](https://build.ros2.org/job/Jdev__mujoco_ros2_control__ubuntu_noble_amd64/) [![Hdev](https://build.ros2.org/job/Hdev__mujoco_ros2_control__ubuntu_jammy_amd64/badge/icon)](https://build.ros2.org/job/Hdev__mujoco_ros2_control__ubuntu_jammy_amd64/) [![CI](https://github.com/ros-controls/mujoco_ros2_control/actions/workflows/ci.yaml/badge.svg)](https://github.com/ros-controls/mujoco_ros2_control/actions/workflows/ci.yaml) ![License](https://img.shields.io/github/license/ros-controls/mujoco_ros2_control) [![Codecov](https://codecov.io/gh/ros-controls/mujoco_ros2_control/branch/main/graph/badge.svg)](https://codecov.io/gh/ros-controls/mujoco_ros2_control)
+This repository is a fork / custom extension of the original [`mujoco_ros2_control`](https://github.com/ros-controls/mujoco_ros2_control) package. Maintainers and authors of the original repository are listed in the package manifests (package.xml) inside mujoco_ros2_control package.
 
-This repository provides a ros2_control system interface and supporting packages to run ROS 2 controllers against the MuJoCo physics simulator.
+# Modifications to do in mujoco_simulation.hpp
 
-This project wraps MuJoCo as a hardware/system interface so you can use the ros2_control stack (controller manager, controllers, controller interfaces) against simulated robots based on MJCF or generated from URDF.
+  Inside the mujoco_ros2_control/mujoco_ros2_control/include/mujoco_ros2_control you must to:
 
-### Contents
+  - Change the scope of these variables from private to protected, in order to make it usable also from the child class
 
-- `mujoco_ros2_control` - core system interface plugin and resources
-- `mujoco_ros2_control_msgs` - message/service definitions used by the plugin
-- `mujoco_ros2_control_plugins` - optional plugins that extend simulation capabilities
-- `mujoco_ros2_control_demos` - demo launch files, configs and example robots
-- `mujoco_ros2_control_tests` - integration / launch tests and simple examples
-- `docker/` - Dockerfiles and scripts to run CI/containers
+  ``` cpp
+  protected:
+  /**
+   * @brief Loops the physics simulation until asked to terminate.
+   */
+  virtual void physics_loop();
 
-### Key features
+  std::unique_ptr<mujoco::Simulate> sim_;
 
-- Full ros2_control SystemInterface plugin for MuJoCo
-- MJCF/URDF conversion utilities to auto-generate MuJoCo models
-- Optional plugin system for extending simulation with custom publishers and services
-- Example demos showing basic control, PID and transmission setups
-
-## Quick start
-
-There are two common ways to get running: build from source (recommended)
-or install prebuilt binaries (if available for your distribution).
-
-- Build from source (recommended)
-
-  1. Install required dependencies manually or from rosdep, including the `mujoco_vendor` package which provides the base MuJoCo install.
-
-  2. Build the workspace (example with a sourced ROS 2 installation):
-
-  ```bash
-  # from workspace root (this repository is typically inside a ROS 2 workspace)
-  colcon build --symlink-install --packages-select mujoco_ros2_control* \
-    --cmake-args -DCMAKE_BUILD_TYPE=Release
+  rclcpp::Node::SharedPtr node_;
   ```
 
-  3. Source the workspace and run a demo:
+  - Make the initialize function a virtual class, in order to use the one of the child that will override this:
 
-  ```bash
-  source install/setup.bash
-  ros2 launch mujoco_ros2_control_demos demo.launch.py
+    ``` cpp
+  virtual bool initialize(rclcpp::Node::SharedPtr node, const std::string& model_path, const std::string& mujoco_model_topic,
+                  double sim_speed_factor, bool headless);
   ```
 
-- Install prebuilt binaries (if available)
+  - Add all the methods you are implementing in the child class as virtual *abstract* methods
 
-  If your ROS 2 distribution or your OS package index provides prebuilt
-  packages for `mujoco_ros2_control`, you can install those instead of
-  compiling from source. Check your distribution's package repositories or
-  the project's GitHub releases for available binary artifacts.
 
-  Example (Debian/Ubuntu with ROS packages — replace `<distro>`):
+  ``` cpp
+    virtual void publish_wrenches() = 0;
 
-  ```bash
-  sudo apt update
-  sudo apt install ros-<distro>-mujoco-ros2-control
+    //void publish_actuator_wrenches() = 0;
+
+    virtual void print_all_joint_torques(const mjModel* m, mjData* d) = 0;
+
+    virtual void publish_odometry(int body_id, const mjModel* model, mjData* data) = 0;
+
+    virtual void getGroundContactWrench(int body_id, const mjModel* model, mjData* data) = 0;
+
+    virtual void publish_imu_data_kinematics(int body_id, const mjModel* model, mjData* data)=0;
   ```
 
-  After installing binaries, source your ROS install and run a demo:
+# Modifications to do in mujoco_simulation.cpp
 
-  ```bash
-  source /opt/ros/<distro>/setup.bash
-  ros2 launch mujoco_ros2_control_demos demo.launch.py
-  ```
 
-See [mujoco_ros2_control/README.md](./mujoco_ros2_control/README.md) for detailed usage, configuration examples and mappings between MJCF actuators/sensors and ros2_control interfaces.
+  Call the main method of your derived class inside the physics_loop() function
 
-Supported ROS 2 distributions
-- The project is developed and tested against multiple ROS 2 distributions.
-  This README includes basic notes for: `Humble`, `Kilted`, `Jazzy` and
-  `Rolling`.
 
-### Support matrix
+# Modifications to do in mujoco_system_interface.cpp
 
-| Distribution | Status |
-| --- | --- |
-| Humble | Supported |
-| Kilted | Supported |
-| Jazzy | Supported |
-| Rolling | Supported (development) |
+Here you will exploit the late binding, because inside the mujoco_system_interface.hpp you have declared:
 
-### Contributing
+  ``` cpp
 
-- Contributions, bug reports and feature requests are welcome. Please follow standard ROS Controls project workflows: open issues, send PRs against the `main` branch and respect the repository code style using `pre-commit`.
+  std::unique_ptr<MujocoSimulation> simulation_;
 
-### License & maintainers
+  ``` 
 
-- This repository is distributed under the terms of the LICENSE file (`LICENSE`). Maintainers and authors are listed in the Git history and package manifests (`package.xml`) inside each package.
+  Where *MujocoSimulation* is the parent class. Inside mujoco_system_interface.cpp you have to change this line as follow:
+
+  ``` cpp
+    simulation_ = std::make_unique<mujoco_ros2_control_truck::GetSimData>();
+  ``` 
+
+  In this way you are creating a late binding because you are initializing an instance of an objet of the parent class, with the pointer of the child class. 
+  According the polymorphism, the parent instance (that is `simulation_`) will call the method of the parent class, expect for the method that has been defined
+  as `virtual`, that is all the one you define in the child class. This is because, theparent object has been initialized with a pointer of the child class

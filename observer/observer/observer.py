@@ -24,7 +24,7 @@ from rcl_interfaces.srv import GetParameters
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
 
-from mujoco_ros2_control_msgs.msg import ContactForces
+from mujoco_ros2_control_msgs.msg import ContactState
 
 class TruckStateObserver(Node):
 
@@ -88,12 +88,12 @@ class TruckStateObserver(Node):
                 callback_group=self.parallel
             )
 
-            self.contact_forces_sub = self.create_subscription(
-                ContactForces,
-                '/contact_forces',  # Adjust topic name if your publisher uses a different one
-                self.contact_forces_callback,
-                10
-            )
+            # self.contact_states_sub = self.create_subscription(
+            #     ContactState,
+            #     '/contact_states',  # Adjust topic name if your publisher uses a different one
+            #     self.DynSimulator.contact_states_callback,
+            #     10
+            # )
         else:
             self.fixed_dt = 1e-2 #The observer should run at 10ms
         
@@ -183,10 +183,10 @@ class TruckStateObserver(Node):
         u = self.truck.PdController(self.state, self.des_vel_x, self.des_omega_z, dt)
         Fx, Mz = u
 
-        dot_x, J_x, h_meas, _ = self.truck.calculate_real_dynamics(self.state, Fx, Mz, True, dt+self.sim_time)
+        dot_x, J_x, h_meas, _ = self.truck.calculate_real_dynamics(self.state, Fx, Mz, False, dt+self.sim_time)
         
         self.state += dot_x*dt
-       
+        print(self.state[enum_obs_state.VY])
         self.output = h_meas
         self.output[[enum_outputs.WX, enum_outputs.WZ]] = self.DynSimulator.add_white_noise_gyro(h_meas[[enum_outputs.WX, enum_outputs.WZ]])
         self.output[[enum_outputs.ACC_Y]] = self.DynSimulator.add_white_noise_acceleration(h_meas[enum_outputs.ACC_Y])
@@ -255,7 +255,7 @@ class TruckStateObserver(Node):
 
         phi_s = self.observed_state[enum_obs_state.ROLL] - self.observed_state[enum_obs_state.PHI_U]
         self.phi_s_data.append(phi_s)
-        self.print()
+        #self.print()
 
 
 

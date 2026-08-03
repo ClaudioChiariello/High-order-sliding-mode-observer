@@ -2,6 +2,7 @@ from sensor_msgs.msg import Imu
 from nav_msgs.msg import Odometry
 from tf2_msgs.msg import TFMessage
 from tf_transformations import euler_from_quaternion, quaternion_matrix
+from mujoco_ros2_control_msgs.msg import ContactState
 
 from observer.utils.states import enum_obs_state, enum_outputs
 
@@ -73,9 +74,9 @@ class DynamicSimulatorCallback:
         with self.lock:
 
             self.dynamic_simulator_state[enum_obs_state.VX] = odom_msg.twist.twist.linear.x
-            self.dynamic_simulator_output[enum_outputs.VX] = odom_msg.twist.twist.linear.x
+            self.dynamic_simulator_output[enum_outputs.VX] = -odom_msg.twist.twist.linear.x
             
-            self.dynamic_simulator_state[enum_obs_state.VY] =  odom_msg.twist.twist.linear.y
+            self.dynamic_simulator_state[enum_obs_state.VY] =  -odom_msg.twist.twist.linear.y
             
             
 
@@ -114,24 +115,24 @@ class DynamicSimulatorCallback:
 
 
 
-    def contact_forces_callback(self, msg: ContactForces):
-        num_contacts = len(msg.contact_positions)
+    def contact_states_callback(self, msg: ContactState):
+
+        # num_contacts = len(msg.ContactPair.)
         
-        if num_contacts == 0:
-            return
+        # if num_contacts == 0:
+        #     return
             
         # 1. Extract all Z components into a clean list using a list comprehension
-        z_forces = [force.z for force in msg.forces]
+        z_forces = [c.force.z for c in msg.contacts]
         
         # Example: Print the total sum of Z forces (total vertical reaction force, e.g., weight/ground reaction)
         total_z_force = sum(z_forces)
-        self.get_logger().info(f"Total Vertical Force (Z) across all contacts: {total_z_force:.2f} N")
 
         # 2. Iterate through each contact along with its corresponding body names and Z force
-        for b1, b2, force in zip(msg.body1_names, msg.body2_names, msg.forces):
-            self.get_logger().info(
-                f"Contact: {b1} <-> {b2} | Force Z: {force.z:.2f} N"
-            )
+        # for b1, b2, force in zip(msg.contacts.body1_names, msg.contacts.body2_names, msg.contacts.force):
+        #     self.get_logger().info(
+        #         f"Contact: {b1} <-> {b2} | Force Z: {force.z:.2f} N"
+        #     )
  
     def angular_velocity_to_rpy_rates(self, yaw_rate_body):
         """
