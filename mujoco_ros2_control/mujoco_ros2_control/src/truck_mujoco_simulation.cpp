@@ -28,7 +28,7 @@ bool GetSimData::initialize(
     wrenches_from_actuators_pub_ = custom_node_->create_publisher<mujoco_ros2_control_msgs::msg::BodyWrench>("/wrenches_from_actuators", 10);
     imu_pub_ = custom_node_->create_publisher<sensor_msgs::msg::Imu>("imu/data", 10);
     contact_state_pub_ = custom_node_->create_publisher<mujoco_ros2_control_msgs::msg::ContactState>("/contact_states", 10);
-    odom_pub_ = custom_node_->create_publisher<nav_msgs::msg::Odometry>("/odom", 10);
+    odom_pub_ = custom_node_->create_publisher<nav_msgs::msg::Odometry>("/odometry", 10);
     
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(custom_node_);
 
@@ -311,18 +311,28 @@ void GetSimData::publish_odometry(int body_id, const mjModel* model, mjData* dat
     // retrieve the velocity in the world frame
     mjtNum vel[6];
     mj_objectVelocity(model, data, mjOBJ_BODY, body_id, vel, 0);
+    
+    int id = mj_name2id(model, mjOBJ_SENSOR, "imu_accel");
+    int adr = model->sensor_adr[id];
+    const mjtNum* acc = data->sensordata + adr;
 
-    // Pointers to world angular (0..2) and linear (3..5) velocities
+     // Pointers to world angular (0..2) and linear (3..5) velocities
     const mjtNum* world_ang_vel = vel;     
     const mjtNum* world_lin_vel = vel + 3; 
 
-    // Pointer to global rotation matrix xmat (3x3 row-major)
-    mjtNum* R = &data->xmat[body_id * 9];
+
+    mjtNum R[9];
+    mju_copy(R, &data->xmat[body_id * 9], 9);
     // Multiply the 1st column by -1 (indices 0, 3, and 6)-
     // Faccio questo perchè sospetto che il base_link e il world_link abbiano l'asse x in direzioni opposte e quando il camion va 5m/s mi trovo che dice che sta a -5m/s
+  
     R[0] *= -1.0;
     R[3] *= -1.0;
     R[6] *= -1.0;
+
+    // Siccome &data->xmat[body_id * 9] è un indirizzo di memoria, andrebbe assegnato a un puntatore a mjtNum
+    // mjtNum* R = &data->xmat[body_id * 9];
+ 
     // 2. Rotate World -> Body frame: v_body = R^T * v_world
     mjtNum body_linear_vel[3];
     mjtNum body_angular_vel[3];
@@ -379,6 +389,19 @@ void GetSimData::publish_odometry(int body_id, const mjModel* model, mjData* dat
     tf_msg.transform.rotation.x = quat_x;
     tf_msg.transform.rotation.y = quat_y;
     tf_msg.transform.rotation.z = quat_z;
+
+
+    double vx = body_linear_vel[0];
+    double wz = body_angular_vel[2];
+
+    double vx_times_wz = vx * wz;
+
+    std::cout << "Accelerometer [m/s²]: "
+            << acc[0] << ", "
+            << acc[1] << ", "
+            << acc[2]
+            << " | vx*wz = " << vx_times_wz
+            << std::endl;
 
     tf_broadcaster_->sendTransform(tf_msg);
     

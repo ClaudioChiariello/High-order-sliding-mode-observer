@@ -4,7 +4,8 @@
   <xacro:arg name="driven_wheels" default="8"/>
   <xacro:arg name="app_point_offset" default="0.0"/>
   <xacro:arg name="steering_limit" default="${35 * pi / 180}"/>
-
+  <xacro:arg name="gz_sim" default="false" />
+  
   <xacro:include filename="$(find truck_description)/urdf/truck.xacro" />
 
   <xacro:if value="${'$(arg control_mode)' == 'control'}">

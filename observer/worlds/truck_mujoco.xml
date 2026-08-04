@@ -1,7 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mujoco model="truck">
   <compiler angle="radian" />
-
   <asset>
     <mesh name="base_link" content_type="model/stl" file="/home/user/ros2_ws/install/truck_description/share/truck_description/meshes/base_link.stl" scale="0.001 0.001 0.001" />
     <mesh name="left_wheel_axis4_1" content_type="model/stl" file="/home/user/ros2_ws/install/truck_description/share/truck_description/meshes/left_wheel_axis4_1.stl" scale="0.001 0.001 0.001" />
@@ -17,7 +16,6 @@
     <mesh name="osdome_link2_1" content_type="model/stl" file="/home/user/ros2_ws/install/truck_description/share/truck_description/meshes/osdome_link2_1.stl" scale="0.001 0.001 0.001" />
     <mesh name="osdome_link3_1" content_type="model/stl" file="/home/user/ros2_ws/install/truck_description/share/truck_description/meshes/osdome_link3_1.stl" scale="0.001 0.001 0.001" />
   </asset>
-
   <worldbody>
     <body name="base_footprint">
       <inertial pos="0 0 0" mass="0.0001" diaginertia="0.0001 0.0001 0.0001" />
@@ -115,22 +113,28 @@
           <geom size="0.15" rgba="0 0 0 1" group="1" />
         </body>
       </body>
-    <freejoint name="root_freejoint" /></body>
+      <freejoint name="root_freejoint" />
+      <site name="imu_site" pos="0 0 0" quat="1 0 0 0" />
+    </body>
   </worldbody>
-<option solver="Newton" iterations="50" tolerance="1e-10" /><actuator>
-  <position name="left_steer_joint_a1" joint="left_steer_joint_a1" kp="5e4" kv="1e4" />
-  <position name="right_steer_joint_a1" joint="right_steer_joint_a1" kp="5e4" kv="1e4" />
-  <position name="left_steer_joint_a2" joint="left_steer_joint_a2" kp="5e4" kv="1e4" />
-  <position name="right_steer_joint_a2" joint="right_steer_joint_a2" kp="5e4" kv="1e4" />
-  <velocity name="left_rot_joint_a1" joint="left_rot_joint_a1" kv="7000" forcerange="-2e7 2e7" />
-  <velocity name="right_rot_joint_a1" joint="right_rot_joint_a1" kv="7000" forcerange="-2e7 2e7" />
-  <velocity name="left_rot_joint_a2" joint="left_rot_joint_a2" kv="7000" forcerange="-2e7 2e7" />
-  <velocity name="right_rot_joint_a2" joint="right_rot_joint_a2" kv="7000" forcerange="-2e7 2e7" />
-  <velocity name="left_rot_joint_a3" joint="left_rot_joint_a3" kv="7000" forcerange="-2e7 2e7" />
-  <velocity name="right_rot_joint_a3" joint="right_rot_joint_a3" kv="7000" forcerange="-2e7 2e7" />
-  <velocity name="left_rot_joint_a4" joint="left_rot_joint_a4" kv="7000" forcerange="-2e7 2e7" />
-  <velocity name="right_rot_joint_a4" joint="right_rot_joint_a4" kv="7000" forcerange="-2e7 2e7" />
-</actuator><sensor>
-  <framepos name="body_pos" objtype="body" objname="base_link" />
-  <framequat name="body_quat" objtype="body" objname="base_link" />
-<frameangvel name="body_angvel" objtype="body" objname="base_link" /></sensor></mujoco>
+  <option solver="Newton" iterations="50" tolerance="1e-10" />
+  <actuator>
+    <position name="left_steer_joint_a1" joint="left_steer_joint_a1" kp="5e4" kv="1e4" />
+    <position name="right_steer_joint_a1" joint="right_steer_joint_a1" kp="5e4" kv="1e4" />
+    <position name="left_steer_joint_a2" joint="left_steer_joint_a2" kp="5e4" kv="1e4" />
+    <position name="right_steer_joint_a2" joint="right_steer_joint_a2" kp="5e4" kv="1e4" />
+    <velocity name="left_rot_joint_a1" joint="left_rot_joint_a1" kv="7000" forcerange="-2e7 2e7" />
+    <velocity name="right_rot_joint_a1" joint="right_rot_joint_a1" kv="7000" forcerange="-2e7 2e7" />
+    <velocity name="left_rot_joint_a2" joint="left_rot_joint_a2" kv="7000" forcerange="-2e7 2e7" />
+    <velocity name="right_rot_joint_a2" joint="right_rot_joint_a2" kv="7000" forcerange="-2e7 2e7" />
+    <velocity name="left_rot_joint_a3" joint="left_rot_joint_a3" kv="7000" forcerange="-2e7 2e7" />
+    <velocity name="right_rot_joint_a3" joint="right_rot_joint_a3" kv="7000" forcerange="-2e7 2e7" />
+    <velocity name="left_rot_joint_a4" joint="left_rot_joint_a4" kv="7000" forcerange="-2e7 2e7" />
+    <velocity name="right_rot_joint_a4" joint="right_rot_joint_a4" kv="7000" forcerange="-2e7 2e7" />
+  </actuator>
+  <sensor>
+  <accelerometer name="imu_accel" site="imu_site" />
+  <gyro name="imu_gyro" site="imu_site" />
+  <framequat name="imu_quat" objtype="site" objname="imu_site" />
+</sensor>
+</mujoco>

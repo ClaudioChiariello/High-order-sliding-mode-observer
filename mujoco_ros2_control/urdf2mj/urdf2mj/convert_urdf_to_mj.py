@@ -153,26 +153,59 @@ def update_wheel_friction(mjcf_root):
                             geom.set("conaffinity", "4")  #
                         
 
-
 def add_sensor_tag(mjcf_root):
-    sensor_elem = ET.SubElement(mjcf_root, "sensor")
-    ET.SubElement(sensor_elem, "framepos", {
-        "name": "body_pos", "objtype": "body", "objname": "base_link"
-    })
+    # 1. Search for the 'base_footprint' body element in the XML tree
+    base_footprint_elem = mjcf_root.find(".//body[@name='base_footprint']")
+    
+    # Fallback search if 'base_footprint' isn't found
+    if base_footprint_elem is None:
+        base_footprint_elem = mjcf_root.find(".//body[@name='base_link']")
+    if base_footprint_elem is None:
+        base_footprint_elem = mjcf_root.find(".//worldbody/body")
+        
+    if base_footprint_elem is None:
+        raise ValueError("Could not find a body element in the XML to attach 'imu_site'")
 
-    ET.SubElement(sensor_elem, "framequat", {
-        "name": "body_quat", "objtype": "body", "objname": "base_link"
-    })
+    # 2. Add 'imu_site' inside the body if it doesn't already exist
+    if base_footprint_elem.find("site[@name='imu_site']") is None:
+        ET.SubElement(base_footprint_elem, "site", {
+            "name": "imu_site",
+            "pos": "0 0 0",
+            "quat": "1 0 0 0"
+        })
 
+    # 3. Find existing <sensor> tag or create a new one at root level
+    sensor_elem = mjcf_root.find("sensor")
+    if sensor_elem is None:
+        sensor_elem = ET.SubElement(mjcf_root, "sensor")
+
+    # 4. Add IMU Sensors
+    # Inertial sensors take direct 'site' attributes
+    if sensor_elem.find("accelerometer[@name='imu_accel']") is None:
+        ET.SubElement(sensor_elem, "accelerometer", {
+            "name": "imu_accel",
+            "site": "imu_site"
+        })
+
+    if sensor_elem.find("gyro[@name='imu_gyro']") is None:
+        ET.SubElement(sensor_elem, "gyro", {
+            "name": "imu_gyro",
+            "site": "imu_site"
+        })
+
+    # Frame sensors require 'objtype' and 'objname' (not 'site')
+    if sensor_elem.find("framequat[@name='imu_quat']") is None:
+        ET.SubElement(sensor_elem, "framequat", {
+            "name": "imu_quat",
+            "objtype": "site",
+            "objname": "imu_site"
+        })
+
+    # Indent for clean formatting
+    ET.indent(mjcf_root, space="  ")
     ET.indent(sensor_elem, space="  ")
- 
-    ET.SubElement(sensor_elem, "frameangvel", {
-        "name": "body_angvel",
-        "objtype": "body",
-        "objname": "base_link"   
-    })
 
-
+    
 def remove_contact_meshed(mjcf_root):
     """Separates collision geoms into group 3 (hidden) and visual geoms into group 1."""
 

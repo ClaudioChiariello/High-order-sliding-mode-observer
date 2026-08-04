@@ -3,11 +3,17 @@
 
 <xacro:arg name="driven_wheels" default="8"/>
 <xacro:arg name="steering_limit" default="${35 * pi / 180}"/>
+<xacro:arg name="gz_sim" default="false" />
+
+<!-- 2. Convert arguments to xacro properties for evaluation -->
+<xacro:property name="gz_sim" value="$(arg gz_sim)" />
 
 <xacro:include filename="$(find truck_control)/urdf/truck8x$(arg driven_wheels)_control.ros2control" />
-<!-- That is the way gz call the control manager. Do it by launch file instead in this setting
-<xacro:include filename="$(find truck_control)/urdf/truck_control.gazebo" />
- -->
+<!-- That is the way gz call the control manager. Do it by launch file instead in this setting -->
+
+<xacro:if value="${gz_sim}">
+  <xacro:include filename="$(find truck_control)/urdf/truck_control.gazebo" />
+</xacro:if>
 
 <!--Extension of base xacro with fictitious link and fixed joint in order to compute odometry of application point-->
 <xacro:arg name="app_point_offset" default="0.0"/>
