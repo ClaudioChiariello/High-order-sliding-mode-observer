@@ -1,0 +1,30 @@
+<launch>
+    <arg name="use_sim_time" default="true"/>
+    <arg name="control_algorithm" default="kinematic_control"/>
+    
+    <!--truck geometric parameters-->
+    <arg name="driven_wheels" default="8" />
+    <arg name="rear_wheel_separation" default="2.088" />
+    <arg name="front_wheel_separation" default="2.131" />
+    <arg name="wheel_radius" default="0.5645" />
+    <arg name="front_wheel_base" default="1.9" />
+    <arg name="central_wheel_base" default="3.75" />
+    <arg name="rear_wheel_base" default="1.382" />
+    <arg name="steering_limit" default="0.5" />
+    <arg name="app_point_offset" default="0.0" />
+    <arg name="rear_centerline_pos" default="2.6815"/>
+
+    <node pkg="truck_control" exec="truck_$(var control_algorithm)" name="truck_$(var control_algorithm)" output="screen">
+        <param name="driven_wheels" value="$(var driven_wheels)" />
+        <param name="rear_wheel_separation" value="$(var rear_wheel_separation)" />
+        <param name="front_wheel_separation" value="$(var front_wheel_separation)" />
+        <param name="wheel_radius" value="$(var wheel_radius)" />
+        <param name="front_wheel_base" value="$(var front_wheel_base)" />
+        <param name="central_wheel_base" value="$(var central_wheel_base)" />
+        <param name="rear_wheel_base" value="$(var rear_wheel_base)" />
+        <param name="steering_limit" value="$(var steering_limit)" />
+        <param name="app_point_offset" value="$(var app_point_offset)" />
+
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+</launch>

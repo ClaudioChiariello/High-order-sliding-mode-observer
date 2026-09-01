@@ -23,6 +23,8 @@ from rcl_interfaces.srv import GetParameters
 
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
+from rclpy.executors import ExternalShutdownException  
+
 
 class TruckStateObserver(Node):
 
@@ -100,8 +102,8 @@ class TruckStateObserver(Node):
         self.observed_output = np.zeros(num_outputs, dtype="float32")
 
         # GAZEBO terms
-        self.gazebo_state = np.zeros(num_states, dtype=np.float64)
-        self.gazebo_output = np.zeros(num_outputs, dtype="float32")
+        self.simulator_state = np.zeros(num_states, dtype=np.float64)
+        self.simulator_output = np.zeros(num_outputs, dtype="float32")
 
 
         # Jacobian of the output vector field
@@ -121,8 +123,8 @@ class TruckStateObserver(Node):
         self.state_data = []
         self.observed_state_data = []
         self.observed_output_data = []
-        self.gazebo_state_data = []
-        self.gazebo_output_data = []
+        self.simulator_state_data = []
+        self.simulator_output_data = []
         self.sim_time = 0.0
 
         self.previous_time = None
@@ -163,11 +165,11 @@ class TruckStateObserver(Node):
 
             state, output = self.Gazebo.get_state_output()
 
-            self.gazebo_state = state.copy()
-            self.gazebo_output = output.copy()
+            self.simulator_state = state.copy()
+            self.simulator_output = output.copy()
 
-            self.gazebo_state_data.append(state.copy())
-            self.gazebo_output_data.append(output.copy())
+            self.simulator_state_data.append(state.copy())
+            self.simulator_output_data.append(output.copy())
         
 
         # Model Dynamic
@@ -293,7 +295,7 @@ class TruckStateObserver(Node):
 
         self.plotter.PlotAtEnd(self.state_data[:n],  self.output_data[:n],
                             self.observed_state_data[:n], self.observed_output_data[:n],
-                            self.gazebo_state_data[:n], self.gazebo_output_data[:n],
+                            self.simulator_state_data[:n], self.simulator_output_data[:n],
                             self.time_data[:n], self.phi_s_data[:n])
 
 
@@ -351,21 +353,30 @@ def main(args=None):
         else:
             rclpy.spin(node) # Handled by the outer try-except now
 
-    except KeyboardInterrupt:
-        # This catches Ctrl+C cleanly for BOTH Gazebo and non-Gazebo modes!
-        node.get_logger().info('Shutting down observer node cleanly...')
+    except (KeyboardInterrupt, ExternalShutdownException):
+        print("\n[INFO] Arresto nodo osservatore richiesto dall'utente...")
         
+    except Exception as e:
+        print(f"[ERROR] Eccezione inattesa nel loop principale: {e}")
+
     finally:
-        # Clean up the executor if it was initialized
+        # 1. Genera prima i grafici mentre i dati sono disponibili
+        try:
+            node.AtEnd()
+        except Exception as e:
+            print(f"[ERROR] Impossibile completare il plotting: {e}")
+
+        # 2. Cleanup dell'executor e distruzione del nodo
         if use_multiThread and 'executor' in locals():
             executor.shutdown()
             
-        # Run your custom end routine and destroy the node
-        node.AtEnd()
         node.destroy_node()
 
+        # 3. Shutdown pulito di rclpy
         if rclpy.ok():
             rclpy.shutdown()
+ 
+
 
 if __name__ == '__main__':
     main()

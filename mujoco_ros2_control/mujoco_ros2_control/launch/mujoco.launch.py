@@ -19,16 +19,16 @@ from launch_ros.parameter_descriptions import ParameterValue, ParameterFile
 def generate_launch_description():
 
     nodes = []
+    observer = get_package_share_directory("observer")
     truck_description_pkg_share = get_package_share_directory('truck_description')
     xacro_file = os.path.join(truck_description_pkg_share, 'urdf', 'piramide_truck.xacro') # Ensure it uses xacro file
- 
+
+
     control_mode = LaunchConfiguration("control_mode")
     driven_wheels = LaunchConfiguration("driven_wheels")
     control_algorithm = LaunchConfiguration("control_algorithm")
     app_point_offset = LaunchConfiguration("app_point_offset")
     steering_limit = LaunchConfiguration("steering_limit")
-    # Parameter that use the xacro to decide if activate mujoco or gz as system interface
-    gz_sim = LaunchConfiguration("gz_sim")
 
     # Run the xacro command to convert the xacro file into an urdf to pass then to robot_description
     robot_description_content = Command([
@@ -47,28 +47,11 @@ def generate_launch_description():
         app_point_offset,
         " steering_limit:=",
         steering_limit,
-        " gz_sim:=",
-        gz_sim,
     ])
 
     truck_control_pkg_share = get_package_share_directory('truck_control')
     controller_manager_parameters_file = PathJoinSubstitution([truck_control_pkg_share, "config", "truck8x8_controllers.yaml"])
-
-
-    # Start gz-sim
-    gz_launch_path = os.path.join(
-        get_package_share_directory('ros_gz_sim'),
-        'launch',
-        'gz_sim.launch.py'
-    )
-
-    gz_sim_include = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(gz_launch_path),
-        launch_arguments={
-            'gz_args': [LaunchConfiguration('world_file'), ' -r'],
-            'on_exit_shutdown': 'True'
-        }.items(),
-    )
+    mujoco_plugins_file = PathJoinSubstitution([truck_control_pkg_share, "config", "mujoco_ros2_control_plugins.yaml"])
 
     # ros2_control node with MuJoCo. Nota che lo stesso eseguibile del pacchetto controller_manager. Per gz sim devi lanciarlo da xml
     nodes.append(
@@ -83,36 +66,29 @@ def generate_launch_description():
     
     )
 
+    mujoco_scene_file = PathJoinSubstitution([
+        truck_description_pkg_share, "mujoco", "scene.xml" # Adjusted from pkg_share to your real package variable
+    ])
+
+    # Gazebo loads the hardware interface directly via its own plugin (gz_ros2_control-system), no need to launch the ros2
     nodes.append(
         Node(
-            package="ros_gz_sim",
-            executable="create",
-            arguments=[
-                "-topic", "robot_description",
-                "-name", "truck",
-                "-allow_renaming", "false",
-                "-x", "0.0",
-                "-y", "0.0",
-                "-z", "0.32",
-                "-Y", "0.0"
-            ]
+            package="mujoco_ros2_control",
+            executable="ros2_control_node",
+            emulate_tty=True,
+            output="both",
+            parameters=[
+                {"use_sim_time": True},
+                ParameterFile(controller_manager_parameters_file),
+                ParameterFile(mujoco_plugins_file),
+            ],
+            remappings=(
+                [("~/robot_description", "/robot_description")] if os.environ.get("ROS_DISTRO") == "humble" else []
+            ),
+            on_exit=Shutdown(),
         )
     )
 
-    nodes.append(
-        Node(
-            package='ros_gz_bridge',
-            executable='parameter_bridge',
-            arguments=[
-                '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
-                '/odometry@nav_msgs/msg/Odometry[gz.msgs.Odometry',
-                '/imu/data@sensor_msgs/msg/Imu@gz.msgs.IMU',
-                '/world/Truck/control@ros_gz_interfaces/srv/ControlWorld'
-            ],
-            output='screen'
-        )
-    )
-  
     controllers_to_spawn = ["joint_state_broadcaster", "traction_controller", "steering_controller"]
 
     for controller in controllers_to_spawn:
@@ -147,6 +123,21 @@ def generate_launch_description():
         )
     )
 
+    # nodes.append(
+    #     Node(
+    #         package="observer",
+    #         executable="observer",
+    #         name="observer",
+    #         parameters=[{
+    #             'use_sim_time': LaunchConfiguration('use_sim_time'),
+    #             'des_vel_x':  LaunchConfiguration('des_vel_x'),
+    #             'des_omega_z': LaunchConfiguration('des_omega_z'),
+    #         }],
+    #         output='screen',
+    #         condition=IfCondition(LaunchConfiguration("launch_observer")),
+    #     )
+    # )
+
     return LaunchDescription([
 
         # Declare args
@@ -165,12 +156,9 @@ def generate_launch_description():
         DeclareLaunchArgument('rear_wheel_base', default_value='1.382'),
         DeclareLaunchArgument('rear_centerline_pos', default_value='2.6815'),
         DeclareLaunchArgument('headless', default_value='false'),
-        DeclareLaunchArgument('gz_sim', default_value='true'),
-        DeclareLaunchArgument('world_file', default_value='empty.sdf'),
-        gz_sim_include,
+        DeclareLaunchArgument('launch_observer', default_value='false'),
+        DeclareLaunchArgument('des_vel_x', default_value='5.0'),
+        DeclareLaunchArgument('des_omega_z', default_value='0.4'),
         *nodes        
     ]
 )
-
-
-
