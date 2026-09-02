@@ -293,11 +293,18 @@ class TruckStateObserver(Node):
         len(self.observed_output_data)
         )
 
+        self.plotter.save_to_csv(self.time_data[:n],
+                                self.state_data[:n],  self.output_data[:n],
+                                self.observed_state_data[:n], self.observed_output_data[:n],
+                                self.phi_s_data[:n],
+                                self.simulator_state_data[:n], self.simulator_output_data[:n],
+                                )
+
+
         self.plotter.PlotAtEnd(self.state_data[:n],  self.output_data[:n],
                             self.observed_state_data[:n], self.observed_output_data[:n],
                             self.simulator_state_data[:n], self.simulator_output_data[:n],
                             self.time_data[:n], self.phi_s_data[:n])
-
 
 
     def print(self):

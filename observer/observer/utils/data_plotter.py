@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import os
 import numpy as np
 from observer.utils.states import enum_obs_state, enum_outputs
+import pandas as pd
 
 class DataPlotter:
 
@@ -12,6 +13,58 @@ class DataPlotter:
             os.makedirs(save_path)
 
         self.data = {}
+
+
+    def save_to_csv(
+            self,
+            time_data,
+            state_data,
+            output_data,
+            observed_state_data,
+            observed_output_data,
+            phi_s,
+            gazebo_state=None,
+            gazebo_output=None,
+            filename="simulation_data.csv",
+        ):
+            """Exports all time-series signals to a structured CSV for MATLAB processing."""
+            data_dict = {"time": np.array(time_data).squeeze()}
+
+            # 1. State Vectors (Real vs. Observed)
+            state = np.array(state_data)
+            observed_state = np.array(observed_state_data)
+            for state_enum in enum_obs_state:
+                data_dict[f"state_real_{state_enum.name}"] = state[:, state_enum.value]
+                data_dict[f"state_obs_{state_enum.name}"] = observed_state[:, state_enum.value]
+
+            # 2. Output Vectors (Real vs. Observed)
+            output = np.array(output_data)
+            observed_output = np.array(observed_output_data)
+            for out_enum in enum_outputs:
+                data_dict[f"output_real_{out_enum.name}"] = output[:, out_enum.value]
+                data_dict[f"output_obs_{out_enum.name}"] = observed_output[:, out_enum.value]
+
+            # 3. Additional Signals
+            data_dict["phi_s"] = np.array(phi_s).squeeze()
+
+            # 4. Optional Gazebo Data
+            if gazebo_state is not None and len(gazebo_state) > 0:
+                gz_state = np.array(gazebo_state)
+                for state_enum in enum_obs_state:
+                    data_dict[f"gz_state_{state_enum.name}"] = gz_state[:, state_enum.value]
+
+            if gazebo_output is not None and len(gazebo_output) > 0:
+                gz_out = np.array(gazebo_output)
+                for out_enum in enum_outputs:
+                    data_dict[f"gz_output_{out_enum.name}"] = gz_out[:, out_enum.value]
+
+            # Convert to Pandas DataFrame and export to CSV
+            df = pd.DataFrame(data_dict)
+            filepath = os.path.join(self.save_path, filename)
+            another_path = "/home/user/ros2_ws/src/observer/matlab/simulation_data.csv"
+            df.to_csv(filepath, index=False)
+            df.to_csv(another_path, index=False)
+            print(f"Data saved to CSV: {filepath}")
 
     def PlotAtEnd(self, sate_data, output_data, observed_state_data, observed_output_data, gazebo_state, gazebo_output, time_data, phi_s, show_gazebo=True):
         
