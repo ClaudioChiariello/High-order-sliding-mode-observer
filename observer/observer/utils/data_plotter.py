@@ -23,6 +23,7 @@ class DataPlotter:
             observed_state_data,
             observed_output_data,
             phi_s,
+            Mz,
             gazebo_state=None,
             gazebo_output=None,
             filename="simulation_data.csv",
@@ -47,6 +48,8 @@ class DataPlotter:
             # 3. Additional Signals
             data_dict["phi_s"] = np.array(phi_s).squeeze()
 
+            data_dict["Mz"] = np.array(Mz).squeeze()
+
             # 4. Optional Gazebo Data
             if gazebo_state is not None and len(gazebo_state) > 0:
                 gz_state = np.array(gazebo_state)
@@ -61,7 +64,7 @@ class DataPlotter:
             # Convert to Pandas DataFrame and export to CSV
             df = pd.DataFrame(data_dict)
             filepath = os.path.join(self.save_path, filename)
-            another_path = "/home/user/ros2_ws/src/observer/matlab/simulation_data.csv"
+            another_path = "/home/user/ros2_ws/src/observer/matlab/observability/simulation_data.csv"
             df.to_csv(filepath, index=False)
             df.to_csv(another_path, index=False)
             print(f"Data saved to CSV: {filepath}")

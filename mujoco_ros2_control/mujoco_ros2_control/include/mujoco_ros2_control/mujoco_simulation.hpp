@@ -290,8 +290,6 @@ public:
 
     //void publish_actuator_wrenches() = 0;
 
-    virtual void print_all_joint_torques(const mjModel* m, mjData* d) = 0;
-
     virtual void publish_odometry(int body_id, const mjModel* model, mjData* data) = 0;
 
     virtual void getGroundContactWrench(int body_id, const mjModel* model, mjData* data) = 0;

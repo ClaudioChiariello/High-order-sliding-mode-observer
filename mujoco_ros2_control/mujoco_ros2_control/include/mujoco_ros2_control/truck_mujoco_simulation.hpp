@@ -44,13 +44,13 @@ namespace mujoco_ros2_control_truck{
         
         void start_physics_thread();
         
-        void print_all_joint_torques(const mjModel* m, mjData* d);
-
         void publish_odometry(int body_id, const mjModel* model, mjData* data);
 
         void getGroundContactWrench(int body_id, const mjModel* model, mjData* data);
 
         void publish_imu_data_kinematics(int body_id, const mjModel* model, mjData* data);
+
+        void computeBaseLinkForces(int body_id, const mjModel* model, mjData* data);
 
         double Paceika_model(const mjModel* model, const mjData* data, double * Fy);
 
@@ -67,8 +67,8 @@ namespace mujoco_ros2_control_truck{
 
         std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
-        rclcpp::Publisher<mujoco_ros2_control_msgs::msg::BodyWrench>::SharedPtr wrench_pub_;
-        rclcpp::Publisher<mujoco_ros2_control_msgs::msg::BodyWrench>::SharedPtr wrenches_from_actuators_pub_;
+        // rclcpp::Publisher<mujoco_ros2_control_msgs::msg::BodyWrench>::SharedPtr wrench_pub_;
+        // rclcpp::Publisher<mujoco_ros2_control_msgs::msg::BodyWrench>::SharedPtr wrenches_from_actuators_pub_;
 
         rclcpp::Publisher<mujoco_ros2_control_msgs::msg::ContactState>::SharedPtr contact_state_pub_;
 

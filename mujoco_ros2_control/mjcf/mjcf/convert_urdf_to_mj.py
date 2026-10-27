@@ -2,9 +2,36 @@ import os
 import xml.etree.ElementTree as ET
 import mujoco
 from ament_index_python.packages import get_package_share_directory, get_package_prefix
+import subprocess
+import os
+from pathlib import Path
+import rclpy
+from rclpy.node import Node
+
+
+# Get the path to the install folder (e.g., '/home/user/ros2_ws/install')
+install_prefix = os.environ.get('COLCON_PREFIX_PATH', '').split(os.pathsep)[0]
 
 """This script generate the scene.xml file that will be included from the ros2_control tag into the urdf at the path
 truck_control/urdf/truc8x8.ros2_control"""
+
+def load_parameters(node):
+    # Declare parameters with default values
+    node.declare_parameter('driven_wheels', 8)
+    node.declare_parameter('steering_limit', 0.52)
+    node.declare_parameter('app_point_offset', 0.0)
+    node.declare_parameter('suspension', 'rigid')
+
+    # Get parameter values
+    params = {
+        'driven_wheels': node.get_parameter('driven_wheels').value,
+        'steering_limit': float(node.get_parameter('steering_limit').value),
+        'app_point_offset': float(node.get_parameter('app_point_offset').value),
+        'suspension': str(node.get_parameter('suspension').value),
+    }
+
+    return params
+
 
 def convert_wheels_to_cylinders(mjcf_root, wheel_half_width="0.18"):
     """
@@ -57,7 +84,11 @@ def set_mujoco_solver(mjcf_root, solver_type="Newton"):
     Options: 'Newton', 'CG', or 'PGS'
     """
     option_elem = mjcf_root.find("option")
-    
+    roll_joint = mjcf_root.find(".//joint[@name='roll_joint']")
+    if roll_joint is not None:
+        roll_joint.set("stiffness", "500000")
+    else:    
+        print("Stai usando un truck senza suspension!!!")
     # Create <option> if it doesn't exist yet
     if option_elem is None:
         option_elem = ET.SubElement(mjcf_root, "option")
@@ -258,15 +289,49 @@ def remove_contact_meshed(mjcf_root):
 
 
 
-def main():
 
-    truck_description = get_package_share_directory('truck_description')
-    
-    # 1. Load URDF file
-    urdf_path = os.path.join(truck_description, "urdf", "truck.urdf")
-    
-    tree = ET.parse(urdf_path)
-    root = tree.getroot()
+def generate_urdf(params=None):
+    if params is None:
+        params = {}
+
+    # Extract parameters with fallback defaults
+    driven_wheels = str(params.get('driven_wheels', '8'))
+    steering_limit = str(params.get('steering_limit', 0.52))
+    app_point_offset = str(params.get('app_point_offset', 0.0))
+    suspension = str(params.get('suspension', 'rigid'))
+
+    truck_share_dir = get_package_share_directory('piramide_bringup')
+    xacro_path = os.path.join(truck_share_dir, "urdf", "piramide_truck.xacro")
+        
+    if not os.path.exists(xacro_path):
+        raise FileNotFoundError(f"Xacro file not found at: {xacro_path}")
+
+    cmd = [
+        "xacro", xacro_path,
+        "control_mode:=control",
+        "headless:=false",
+        f"driven_wheels:={driven_wheels}",
+        f"app_point_offset:={app_point_offset}",
+        f"steering_limit:={steering_limit}",
+        f"suspension:={suspension}"
+    ]
+
+    print(f"Executing xacro for {xacro_path}. I will not save the urdf!")
+    xml_string = subprocess.check_output(cmd, text=True)
+
+    return xml_string
+
+def main(args=None):
+
+    rclpy.init(args=args)
+    node = rclpy.create_node('mjcf')
+    params = load_parameters(node)
+
+    xml_content = generate_urdf(params)
+    root = ET.fromstring(xml_content)
+ 
+    #tree = ET.parse(urdf_path)
+    #root = tree.getroot() <-- this is needed if you pass the path, because this command will retrieve the <robot> tag. If you pass directly the xml, you don't need this
 
     # 2. Inject compiler rules into URDF tree
     mujoco_elem = root.find("mujoco")
@@ -317,12 +382,14 @@ def main():
     # 5. Save updated XML
     mjcf_tree.write(output_path, encoding="utf-8", xml_declaration=True)
 
-    # ATTUALMENTE LO SALVA SOLO NELLA DIRECTORY install/mjcf/share
-    # ws_root = os.path.abspath(os.path.join(get_package_prefix('observer'), '..', '..'))
-    # observer_src = os.path.join(ws_root, 'src', 'mjcf', "models", "truck_mujoco.xml")
-    # mjcf_tree.write(observer_src, encoding="utf-8", xml_declaration=True)
+    # Salvo anche in src
+    models_src = os.path.join(install_prefix, '../', 'src', 'mujoco_ros2_control', 'mjcf', "models", "truck_mujoco.xml")
+    mjcf_tree.write(models_src, encoding="utf-8", xml_declaration=True)
     
     print(f"Successfully generated MuJoCo model with actuators & sensors at: {output_path}")
+
+    node.destroy_node()
+    rclpy.shutdown()
 
 
 if __name__ == '__main__':

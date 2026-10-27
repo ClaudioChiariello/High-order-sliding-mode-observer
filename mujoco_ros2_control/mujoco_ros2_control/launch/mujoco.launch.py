@@ -11,7 +11,7 @@ from launch_ros.substitutions import FindPackageShare
 
 from ament_index_python.packages import get_package_share_directory
 from launch.actions import RegisterEventHandler, TimerAction, Shutdown
-from launch.event_handlers import OnProcessStart
+from launch.event_handlers import OnProcessStart, OnProcessExit
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.parameter_descriptions import ParameterValue, ParameterFile
 
@@ -19,8 +19,8 @@ from launch_ros.parameter_descriptions import ParameterValue, ParameterFile
 def generate_launch_description():
 
     nodes = []
-    observer = get_package_share_directory("observer")
-    truck_description_pkg_share = get_package_share_directory('truck_description')
+    #observer = get_package_share_directory("observer")
+    truck_description_pkg_share = get_package_share_directory('piramide_bringup')
     xacro_file = os.path.join(truck_description_pkg_share, 'urdf', 'piramide_truck.xacro') # Ensure it uses xacro file
 
 
@@ -47,10 +47,23 @@ def generate_launch_description():
         app_point_offset,
         " steering_limit:=",
         steering_limit,
+        " suspension:=",
+        LaunchConfiguration("suspension"),
+        " sim_type:=",
+        "mujoco", #--> forced to 'mujoco' (must never be 'gazebo')
+        " scene:=",
+        LaunchConfiguration("scene")
     ])
 
+
+    controller_file_name = [
+        TextSubstitution(text="truck8x"),
+        LaunchConfiguration('driven_wheels'),
+        TextSubstitution(text="_controllers.yaml")
+    ]
+
     truck_control_pkg_share = get_package_share_directory('truck_control')
-    controller_manager_parameters_file = PathJoinSubstitution([truck_control_pkg_share, "config", "truck8x8_controllers.yaml"])
+    controller_manager_parameters_file = PathJoinSubstitution([truck_control_pkg_share, "config", controller_file_name])
     mujoco_plugins_file = PathJoinSubstitution([truck_control_pkg_share, "config", "mujoco_ros2_control_plugins.yaml"])
 
     # ros2_control node with MuJoCo. Nota che lo stesso eseguibile del pacchetto controller_manager. Per gz sim devi lanciarlo da xml
@@ -123,20 +136,26 @@ def generate_launch_description():
         )
     )
 
-    # nodes.append(
-    #     Node(
-    #         package="observer",
-    #         executable="observer",
-    #         name="observer",
-    #         parameters=[{
-    #             'use_sim_time': LaunchConfiguration('use_sim_time'),
-    #             'des_vel_x':  LaunchConfiguration('des_vel_x'),
-    #             'des_omega_z': LaunchConfiguration('des_omega_z'),
-    #         }],
-    #         output='screen',
-    #         condition=IfCondition(LaunchConfiguration("launch_observer")),
-    #     )
-    # )
+    generate_mujoco_xml_file = Node(
+            package="mjcf",
+            executable="converter2mujoco",
+            name="mjcf",
+            output="screen",
+            parameters=[{
+                'driven_wheels': LaunchConfiguration('driven_wheels'),
+                'steering_limit': LaunchConfiguration('steering_limit'),
+                'app_point_offset': LaunchConfiguration('app_point_offset'),
+                'suspension': LaunchConfiguration('suspension'),
+            }]
+        )
+    
+
+    launch_other_nodes_after_converter = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=generate_mujoco_xml_file,
+            on_exit=nodes,
+        )
+    )
 
     return LaunchDescription([
 
@@ -159,6 +178,10 @@ def generate_launch_description():
         DeclareLaunchArgument('launch_observer', default_value='false'),
         DeclareLaunchArgument('des_vel_x', default_value='5.0'),
         DeclareLaunchArgument('des_omega_z', default_value='0.4'),
-        *nodes        
+        DeclareLaunchArgument('suspension', default_value='rigid'),
+        DeclareLaunchArgument('scene', default_value='flat'),
+        launch_other_nodes_after_converter,
+        generate_mujoco_xml_file,
+               
     ]
 )

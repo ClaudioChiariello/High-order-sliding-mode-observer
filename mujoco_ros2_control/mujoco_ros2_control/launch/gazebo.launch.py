@@ -1,7 +1,7 @@
 import os
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, Command, PathJoinSubstitution, PythonExpression, TextSubstitution, FindExecutable
@@ -19,7 +19,7 @@ from launch_ros.parameter_descriptions import ParameterValue, ParameterFile
 def generate_launch_description():
 
     nodes = []
-    truck_description_pkg_share = get_package_share_directory('truck_description')
+    truck_description_pkg_share = get_package_share_directory('piramide_bringup')
     xacro_file = os.path.join(truck_description_pkg_share, 'urdf', 'piramide_truck.xacro') # Ensure it uses xacro file
  
     control_mode = LaunchConfiguration("control_mode")
@@ -107,7 +107,6 @@ def generate_launch_description():
                 '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock',
                 '/odometry@nav_msgs/msg/Odometry[gz.msgs.Odometry',
                 '/imu/data@sensor_msgs/msg/Imu@gz.msgs.IMU',
-                '/world/Truck/control@ros_gz_interfaces/srv/ControlWorld'
             ],
             output='screen'
         )
@@ -115,8 +114,9 @@ def generate_launch_description():
   
     controllers_to_spawn = ["joint_state_broadcaster", "traction_controller", "steering_controller"]
 
+    controller_nodes = []
     for controller in controllers_to_spawn:
-        nodes.append(
+        controller_nodes.append(
             Node(
                 package="controller_manager",
                 executable="spawner",
@@ -124,6 +124,13 @@ def generate_launch_description():
                 output="both",
             )
         )
+
+    delayed_controllers = TimerAction(
+        period=5.0,
+        actions=controller_nodes
+    )
+
+    nodes.append(delayed_controllers)
 
     nodes.append(
         Node(

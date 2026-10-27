@@ -45,13 +45,12 @@ public:
         L2_ = L3_ + central_wheel_base_;
         L1_ = L2_ + front_wheel_base_;
 
-
-
+        //Declare derived geometric quantities as ROS2 parameters
         this->declare_parameter<double>("L1", L1_);
         this->declare_parameter<double>("L2", L2_);
         this->declare_parameter<double>("L3", L3_);
         this->declare_parameter<double>("L4", L4_);
-        
+
         /*Subscription to the cmd_vel topic to receive desired linear and rotational speeds
         for the chosen application point of the truck*/
         cmd_vel_subscriber_ = this->create_subscription<geometry_msgs::msg::Twist>(

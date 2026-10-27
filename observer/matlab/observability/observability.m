@@ -1,26 +1,49 @@
 clear; clc;
 
 
-data = readtable('simulation_data.csv');
+T = readtable('csv_for_observability_matrix/simulation_data_curve.csv');
+data = table2array(T);
 
+% Check for NaN values
+nan_mask = isnan(data);
+
+if any(nan_mask, 'all')
+    fprintf('WARNING: NaN values found in the CSV file!\n\n');
+
+    % Total number of NaNs
+    fprintf('Total NaN values: %d\n\n', sum(nan_mask, 'all'));
+
+    % Find rows and columns containing NaNs
+    [rows, cols] = find(nan_mask);
+
+    fprintf('NaN locations:\n');
+
+    for k = 1:length(rows)
+        fprintf('Row %d, Column %s\n', ...
+            rows(k), T.Properties.VariableNames{cols(k)});
+    end
+
+else
+    fprintf('No NaN values found in the CSV file.\n');
+end
+
+ 
 % Extract signals as vectors
-time = data.time;
-vy_real = data.state_real_VY;
-vx_real = data.state_real_VX;
-phi_real = data.state_real_ROLL;
-wx_real = data.state_real_WX;
-wz_real = data.state_real_WZ;
-
-vy_obs  = data.state_obs_VY;
-
-
+time = T.time;
+vy_real = T.state_real_VY;
+vx_real = T.state_real_VX;
+phi_real = T.state_real_PHI;
+wx_real = T.state_real_WX;
+wz_real = T.state_real_WZ;
+Mz_real = T.Mz;
+phi_u_real = T.state_real_PHI_U;
 
 
 %% 2. Physical Parameters (Numeric Constants)
 params.m = 12809.162180730276; 
 params.Ix = 4423.849628639999; 
 params.Iz = 35308.58917090647;
-params.C_alpha = 350e2;
+params.C_alpha = 90000;
 params.Cr = 200000.0; 
 params.Kr = 800000; 
 params.g = -9.81;
@@ -52,13 +75,13 @@ syms.vx_lim  = syms.vx;
 Fx = syms.Fx;
 Mz = syms.Mz;
 
-[real_state, dot_x_real, J_x_real, h_real, J_h_real] = Copy_of_compute_truck_real_state(params, syms);
+[real_state, dot_x_real, J_x_real, h_real, J_h_real] = model_for_obs(params, syms);
 
 % f(x)
-f = dot_x_real;
+f = dot_x_real([1:end-2, end]);
 
-% h(x)
-h = h_real;
+% h remove the vx from the output
+h = h_real(1:end-1); 
 
 % Jacobian of f (constant throughout the recursion)
 Jf = J_x_real;
@@ -74,9 +97,28 @@ J_h = jacobian(h, real_state);
 Lie_derivative = J_h*f;
 
 PHI = [h; Lie_derivative];
-
+ 
 dPhi = jacobian(PHI, real_state);
 
+N = length(vx_real);
+rank_vector = zeros(N,1);
+
+dPhi_func = matlabFunction(dPhi, 'Vars', ...
+    {syms.Mz, syms.phi_u, syms.vx, syms.vy, syms.phi, syms.wx, syms.wz});
+
+for k = 1:N
+    % Evaluate matrix numerically at time step k
+    M_k = dPhi_func(Mz_real(k), phi_u_real(k), vx_real(k), ...
+                    vy_real(k), phi_real(k), wx_real(k), ...
+                    wz_real(k) ...
+                    );
+
+    % Compute numerical rank
+    rank_vector(k) = rank(M_k);
+end
+
 Gramian = dPhi' * dPhi;
+
+rank(Gramian)
 %obs_expression = simplify(det(Gramian));
 %unobservable_states = solve(obs_expression == 0, real_state);

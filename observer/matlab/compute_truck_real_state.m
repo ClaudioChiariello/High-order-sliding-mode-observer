@@ -23,7 +23,7 @@ function [model_state, dot_x, J_x, h, J_h] = compute_truck_real_state(p, s)
     %          0, cos(phi),            -sin(phi);
     %          0, sin(phi)/cos(theta),  cos(phi)/cos(theta)];
     % considera che questo sistema hai voluto scriverlo nel frame delle
-    % passe sprung. Quindi hai sen(phi_s) nel gravitational term perchè
+    % masse sprung. Quindi hai sen(phi_s) nel gravitational term perchè
     % phi_s è lo scostamento angolare dalla posizione di equilibrio della
     % massa sprung. Stesso ragionamento per i termini che moltiplicano la
     % costante elastica e smorzamento.
@@ -58,4 +58,5 @@ function [model_state, dot_x, J_x, h, J_h] = compute_truck_real_state(p, s)
     %% 6. Calcolo Jacobiani Analitici rispetto a model_state
     J_x = jacobian(dot_x, model_state);
     J_h = jacobian(h, model_state);
+
 end

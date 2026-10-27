@@ -3,6 +3,10 @@
 #include <iostream>
 #include <iomanip>
 #include <nav_msgs/msg/odometry.hpp>
+#include <Eigen/Dense>
+
+
+
 
 namespace mujoco_ros2_control_truck{
 
@@ -27,8 +31,7 @@ bool GetSimData::initialize(
     custom_node_ = node;
 
     // 2. Setup ROS 2 publishers using the node handle
-    wrench_pub_ = custom_node_->create_publisher<mujoco_ros2_control_msgs::msg::BodyWrench>("/wrenches", 10);
-    wrenches_from_actuators_pub_ = custom_node_->create_publisher<mujoco_ros2_control_msgs::msg::BodyWrench>("/wrenches_from_actuators", 10);
+    //wrenches_from_actuators_pub_ = custom_node_->create_publisher<mujoco_ros2_control_msgs::msg::BodyWrench>("/wrenches_from_actuators", 10);
     imu_pub_ = custom_node_->create_publisher<sensor_msgs::msg::Imu>("imu/data", 10);
     contact_state_pub_ = custom_node_->create_publisher<mujoco_ros2_control_msgs::msg::ContactState>("/contact_states", 10);
     odom_pub_ = custom_node_->create_publisher<nav_msgs::msg::Odometry>("/odometry", 10);
@@ -38,10 +41,6 @@ bool GetSimData::initialize(
     return true;
 }
 
- 
-void GetSimData::print_all_joint_torques(const mjModel* m, mjData* d) {
-    // Method body
-}
 
 void GetSimData::publish_wrenches(){
 
@@ -52,34 +51,17 @@ void GetSimData::publish_wrenches(){
     mjModel* model = this->model();
     mjData* data = this->data();
     
-    int base_link_id = mj_name2id(model, mjOBJ_BODY, "base_link");
+    //int base_link_id = mj_name2id(model, mjOBJ_BODY, "base_link");
     int base_footprint_id = mj_name2id(model, mjOBJ_BODY, "base_footprint");
     
     publish_odometry(base_footprint_id, model, data);
 
-    getGroundContactWrench(base_link_id, model, data);
+    getGroundContactWrench(base_footprint_id, model, data);
 
     int imu_link_id = mj_name2id(model, mjOBJ_BODY, "imu_link");
     publish_imu_data_kinematics(imu_link_id, model, data);
 
-    // const mjtNum* wrench = data->cfrc_int + 6 * base_link_id;
-
-    // mujoco_ros2_control_msgs::msg::BodyWrench msg;
-    
-    // msg.header.stamp = node_->now();
-    // msg.header.frame_id = "base_link";
-
-    // msg.body_name = "base_link";
-
-    // msg.wrench.force.x = wrench[3];
-    // msg.wrench.force.y = wrench[4];
-    // msg.wrench.force.z = wrench[5];
-
-    // msg.wrench.torque.x = wrench[0];
-    // msg.wrench.torque.y = wrench[1];
-    // msg.wrench.torque.z = wrench[2];
-
-    // wrench_pub_->publish(msg);
+    //computeBaseLinkForces(base_link_id, model, data);
 }
 
 
@@ -161,6 +143,7 @@ void GetSimData::getGroundContactWrench(int body_id, const mjModel* model, mjDat
 
     double Fn_r = 0;
     double Fn_l = 0;
+
     for (int i = 0; i < data->ncon; ++i) {
         
         // Single contact sub-message
@@ -401,4 +384,73 @@ double GetSimData::Paceika_model(const mjModel* model, const mjData* data, doubl
     return Fy[0] * std::cos(delta[0]) +  Fy[1] * std::cos(delta[1])  + Fy[2] +  Fy[3];
 
 }
+
+
+// void GetSimData::computeBaseLinkForces(int body_id, const mjModel* m, mjData* d) {
+    
+
+//     mujoco_ros2_control_msgs::msg::BodyWrench msg;
+    
+//     msg.header.stamp = node_->now();
+//     msg.header.frame_id =  mj_id2name(m, mjOBJ_BODY, body_id);
+
+//     msg.body_name = mj_id2name(m, mjOBJ_BODY, body_id);
+
+//     // Get the base_link orientation matrix and global position
+//     // xmat is stored as a 9-element row-major array [R00, R01, R02, R10, ...]
+//     Eigen::Map<const Eigen::Matrix3d> R_base_world(&d->xmat[9 * body_id]); // Body to World orientation (it takes a memory address to work)
+//     Eigen::Map<const Eigen::Vector3d> pos_base(&d->xpos[3 * body_id]);     // World position of the bodyid frame
+
+//     // 2. Iterate through active contacts
+//     for (int i = 0; i < d->ncon; ++i) {
+
+//         const mjContact& contact = d->contact[i];
+
+//         int body1 = m->geom_bodyid[contact.geom1];
+//         int body2 = m->geom_bodyid[contact.geom2];
+
+//         // Check if the contact involves base_link directly or indirectly
+//         if (body1 == body_id || body2 == body_id) {
+//             // Extract 6D contact force in the contact frame (3 translational + 3 rotational)
+//             mjtNum c_force[6];
+//             mj_contactForce(m, d, i, c_force);
+//                     std::cout<<c_force<<std::endl;
+
+
+//             // Contact frame layout in c_force:
+//             // c_force[0] = normal force
+//             // c_force[1], c_force[2] = tangential friction forces
+//             Eigen::Vector3d f_contact(c_force[0], c_force[1], c_force[2]);
+
+//             // Map contact frame orientation matrix (3x3 row-major)
+//             Eigen::Map<const Eigen::Matrix3d> R_contact(contact.frame);
+
+//             // Rotate force into the world frame: F_world = R_contact^T * F_contact
+//             Eigen::Vector3d f_world = R_contact.transpose() * f_contact;
+
+//             // Rotate force from world frame to base_link body frame: F_body = R_base^T * F_world
+//             Eigen::Vector3d f_body = R_base_world.transpose() * f_world;
+
+//             // Calculate lever arm vector from base_link origin to contact point (in World Frame)
+//             Eigen::Map<const Eigen::Vector3d> pos_contact(contact.pos); //position of the contact frame in world frame
+//             Eigen::Vector3d r_world = pos_contact - pos_base;
+
+//             // Compute torque in world frame: T_world = r_world x F_world
+//             Eigen::Vector3d t_world = r_world.cross(f_world);
+
+//             // Rotate torque into base_link body frame: T_body = R_base^T * T_world
+//             Eigen::Vector3d t_body = R_base_world.transpose() * t_world;
+
+//             // Determine reaction sign: negate force if base_link is geom2 (MuJoCo computes force on geom1 by default)
+//             double sign = (body1 == body_id) ? 1.0 : -1.0;
+
+//             // Accumulate body-frame longitudinal force (X) and yaw torque (Z)
+//             msg.wrench.force.x  += sign * f_body.x();
+//             msg.wrench.torque.z += sign * t_body.z();
+//         }
+//     }
+
+//     wrench_pub_->publish(msg);
+// }
+
 }

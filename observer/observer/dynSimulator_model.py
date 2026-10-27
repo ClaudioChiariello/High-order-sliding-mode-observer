@@ -20,7 +20,7 @@ node lifecycle
 It just needs access to the node's state. So Inheritance would be a good solution since the class Callbacks would become a node"""
  
  
-class GazeboCallback:
+class DynSimulatorCallback:
 
     def __init__(self, node):
         self.node = node
@@ -28,8 +28,8 @@ class GazeboCallback:
         num_states = 6
         num_outputs = 6 
 
-        self.gazebo_state = np.zeros(num_states, dtype='float32')
-        self.gazebo_output = np.zeros(num_outputs, dtype='float32')
+        self.DynSimulator_state = np.zeros(num_states, dtype='float32')
+        self.DynSimulator_output = np.zeros(num_outputs, dtype='float32')
         
      
         self.vx = np.float32(0.0)
@@ -56,16 +56,16 @@ class GazeboCallback:
       
         with self.lock:
 
-            self.gazebo_state[enum_obs_state.ROLL] = roll
-            self.gazebo_output[enum_outputs.ROLL] = roll
+            self.DynSimulator_state[enum_obs_state.ROLL] = roll
+            self.DynSimulator_output[enum_outputs.ROLL] = roll
 
-            self.gazebo_state[enum_obs_state.WX] = msg.angular_velocity.x
-            self.gazebo_output[enum_outputs.WX] = msg.angular_velocity.x
+            self.DynSimulator_state[enum_obs_state.WX] = msg.angular_velocity.x
+            self.DynSimulator_output[enum_outputs.WX] = msg.angular_velocity.x
 
-            self.gazebo_state[enum_obs_state.WZ] = msg.angular_velocity.z
-            self.gazebo_output[enum_outputs.WZ] = msg.angular_velocity.z
+            self.DynSimulator_state[enum_obs_state.WZ] = msg.angular_velocity.z
+            self.DynSimulator_output[enum_outputs.WZ] = msg.angular_velocity.z
 
-            self.gazebo_output[enum_outputs.ACC_Y] = msg.linear_acceleration.y
+            self.DynSimulator_output[enum_outputs.ACC_Y] = msg.linear_acceleration.y
 
 
     #Called every 50ms (20Hz) 
@@ -73,10 +73,10 @@ class GazeboCallback:
         
         with self.lock:
 
-            self.gazebo_state[enum_obs_state.VX] = odom_msg.twist.twist.linear.x
-            self.gazebo_output[enum_outputs.VX] = odom_msg.twist.twist.linear.x
+            self.DynSimulator_state[enum_obs_state.VX] = odom_msg.twist.twist.linear.x
+            self.DynSimulator_output[enum_outputs.VX] = odom_msg.twist.twist.linear.x
             
-            self.gazebo_state[enum_obs_state.VY] =  odom_msg.twist.twist.linear.y
+            self.DynSimulator_state[enum_obs_state.VY] =  odom_msg.twist.twist.linear.y
 
 
     def add_white_noise_gyro(self, signal):
@@ -107,8 +107,8 @@ class GazeboCallback:
     def get_state_output(self):
 
         with self.lock:
-            state = self.gazebo_state.copy()
-            output = self.gazebo_output.copy()
+            state = self.DynSimulator_state.copy()
+            output = self.DynSimulator_output.copy()
 
         return state, output
 

@@ -9,7 +9,7 @@ from nav_msgs.msg import Odometry
 import tf2_ros
 from tf_transformations import quaternion_matrix
 
-from .gazebo_model import GazeboCallback
+from .dynSimulator_model import DynSimulatorCallback
 from observer.model import dynamic_model 
 from observer.utils.data_plotter import DataPlotter
 from observer.utils.states import enum_obs_state, enum_outputs
@@ -18,8 +18,7 @@ from geometry_msgs.msg import Twist
 
 from scipy.spatial.transform import Rotation as R
 from rclpy.callback_groups import ReentrantCallbackGroup
-from std_msgs.msg import Float64MultiArray
-from rcl_interfaces.srv import GetParameters
+ 
 
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import JointState
@@ -45,16 +44,16 @@ class TruckStateObserver(Node):
         # Friend Function 
         self.truck = dynamic_model.DynamicModel()
         
-        self.Gazebo = GazeboCallback(self)
+        self.DynSimulator = DynSimulatorCallback(self)
         
         self.plotter = DataPlotter("results")
 
         if self.get_parameter("use_sim_time").value:
-            self.fixed_dt = 1e-3 #lo rendi abbastanza basso da usare il tempo di gazebo
+            self.fixed_dt = 1e-3 #lo rendi abbastanza basso da usare il tempo di DynSimulator
             
-            self.timer_gazebo = self.create_timer(
+            self.timer_DynSimulator = self.create_timer(
                 self.fixed_dt, 
-                self.GazeboControl,
+                self.DynSimulatorControl,
                 callback_group=self.parallel
             )
 
@@ -75,7 +74,7 @@ class TruckStateObserver(Node):
             self.imu_sub = self.create_subscription(
                 Imu,
                 '/imu/data', #50Hz
-                self.Gazebo.imu_callback,
+                self.DynSimulator.imu_callback,
                 qos_profile_sensor_data,
                 callback_group=self.parallel
             )
@@ -83,7 +82,7 @@ class TruckStateObserver(Node):
             self.odom_sub = self.create_subscription(
                 Odometry,
                 '/odometry', #20Hz
-                self.Gazebo.odom_callback,
+                self.DynSimulator.odom_callback,
                 qos_profile_sensor_data,
                 callback_group=self.parallel
             )
@@ -141,9 +140,9 @@ class TruckStateObserver(Node):
         self.dot_omega_x_obs_prev = np.float32(0.0) 
 
         self.phi_s_data = []
+        self.Mz_data = []
 
-
-    def GazeboControl(self):
+    def DynSimulatorControl(self):
         msg = Twist()
         # Linear velocity (m/s)
         msg.linear.x = self.des_vel_x
@@ -163,7 +162,7 @@ class TruckStateObserver(Node):
 
         if self.get_parameter("use_sim_time").value:
 
-            state, output = self.Gazebo.get_state_output()
+            state, output = self.DynSimulator.get_state_output()
 
             self.simulator_state = state.copy()
             self.simulator_output = output.copy()
@@ -181,8 +180,8 @@ class TruckStateObserver(Node):
         self.state += dot_x*dt
        
         self.output = h_meas
-        self.output[[enum_outputs.WX, enum_outputs.WZ]] = self.Gazebo.add_white_noise_gyro(h_meas[[enum_outputs.WX, enum_outputs.WZ]])
-        self.output[[enum_outputs.ACC_Y]] = self.Gazebo.add_white_noise_acceleration(h_meas[enum_outputs.ACC_Y])
+        self.output[[enum_outputs.WX, enum_outputs.WZ]] = self.DynSimulator.add_white_noise_gyro(h_meas[[enum_outputs.WX, enum_outputs.WZ]])
+        self.output[[enum_outputs.ACC_Y]] = self.DynSimulator.add_white_noise_acceleration(h_meas[enum_outputs.ACC_Y])
         
 
         self.state_data.append(self.state.copy())
@@ -206,6 +205,7 @@ class TruckStateObserver(Node):
         self.observed_state_data.append(self.observed_state.copy())
         self.observed_output_data.append(self.observed_output.copy())
 
+        self.Mz_data.append(Mz)
 
         self.sim_time += dt
         self.time_data.append(self.sim_time)
@@ -297,6 +297,7 @@ class TruckStateObserver(Node):
                                 self.state_data[:n],  self.output_data[:n],
                                 self.observed_state_data[:n], self.observed_output_data[:n],
                                 self.phi_s_data[:n],
+                                self.Mz_data,
                                 self.simulator_state_data[:n], self.simulator_output_data[:n],
                                 )
 
